@@ -26,6 +26,7 @@
 // Request Versions
 #define REQ_VERSION_1_0 1
 #define REQ_VERSION_1_1 2
+#define REQ_VERSION_2_0 3
 
 typedef struct {
     uint8_t method;
@@ -33,18 +34,13 @@ typedef struct {
     char uri[WS_PATH_BUFFER_SIZE];
 } WsRequest;
 
-/* creates a WsRequest from some char*. Requires "\r\n" to be included at the
- * end of the char* or else will segfault.
- * if WsRequest cannot be created then method will be set to the correct error
- * and WsRequest_valid will return that error
+/* Creates a WsRequest from some char*.
+ * Requires "\r\n" to be included at the end of the char* or else could
+ * segfault. If WsRequest cannot be created then method will be set to the
+ * correct error.
+ *
+ * If no error 'uri' will have a '\0' at the end for use of str*() funcitons.
  */
 WsRequest WsRequest_create(const char* from);
-
-/* checks if a WsRequest is valid.
- * returns:
- *   0  if WsRequest is valid
- *   <0 on error
- */
-int WsRequest_valid(const WsRequest* request);
 
 #endif

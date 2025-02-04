@@ -124,6 +124,11 @@ WsRequest WsRequest_create(const char* from)
                     curr_index + 7 == end_index)) {
             rv.version = REQ_VERSION_1_1;
             break;
+        } else if (strncmp(from + curr_index, "HTTP/2.0", 8) == 0 &&
+                   (is_whitespace(from[curr_index + 8]) ||
+                    curr_index + 7 == end_index)) {
+            rv.version = REQ_VERSION_2_0;
+            break;
         }
     }
     if (rv.version == 0) {
