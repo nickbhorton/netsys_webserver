@@ -1,4 +1,4 @@
-#include "server.h"
+#include "common.h"
 
 #include <stdbool.h>
 #include <string.h>

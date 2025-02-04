@@ -3,8 +3,8 @@ CFLAGS=-g3 -Wall -Werror -fsanitize=address
 
 all: test 
 
-test: test.o server.o
+test: test.o common.o
 	$(CC) -o $@ $^ $(CFLAGS) -lcunit
 
 test.o: test.c
-server.o: server.c server.h
+common.o: common.c common.h

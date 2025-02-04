@@ -1,7 +1,7 @@
 #include <CUnit/Basic.h>
 #include <CUnit/CUnit.h>
 
-#include "server.h"
+#include "common.h"
 
 #define FILE_COUNT 2
 
