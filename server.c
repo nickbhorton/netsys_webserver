@@ -14,15 +14,18 @@ WsRequest WsRequest_create(const char* from)
     size_t end_index = 0;
     char prev = 0;
     char curr = 0;
-    while (1) {
-        curr = from[end_index];
+    for (size_t i = 0; i < WS_BUFFER_SIZE; i++) {
+        curr = from[i];
         if (prev == '\r' && curr == '\n') {
             // put the end index at char befor "\r\n"
-            end_index = end_index - 2;
+            end_index = i - 2;
             break;
         }
-        end_index++;
         prev = curr;
+    }
+    if (end_index == 0) {
+        rv.method = REQ_ERROR_BUFFER_OVERFLOW;
+        return rv;
     }
 
     size_t curr_index = 0;

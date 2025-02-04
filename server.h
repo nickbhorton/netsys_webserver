@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #define WS_PATH_BUFFER_SIZE 1024
+#define WS_BUFFER_SIZE 2048
 
 // Request Methods
 #define REQ_METHOD_GET 1
@@ -22,6 +23,7 @@
 #define REQ_ERROR_URI_PARSE 254
 #define REQ_ERROR_URI_SIZE 253
 #define REQ_ERROR_VERSION_PARSE 252
+#define REQ_ERROR_BUFFER_OVERFLOW 251
 
 // Request Versions
 #define REQ_VERSION_1_0 1
@@ -35,8 +37,7 @@ typedef struct {
 } WsRequest;
 
 /* Creates a WsRequest from some char*.
- * Requires "\r\n" to be included at the end of the char* or else could
- * segfault. If WsRequest cannot be created then method will be set to the
+ * If WsRequest cannot be created then method will be set to the
  * correct error.
  *
  * If no error 'uri' will have a '\0' at the end for use of str*() funcitons.

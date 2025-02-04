@@ -190,6 +190,16 @@ void request_uri_size_error(void)
     CU_ASSERT(wreq.version == 0);
 }
 
+void request_buffer_overflow_error(void)
+{
+    char uri[WS_BUFFER_SIZE + 2];
+    memcpy(uri, "GET /", strlen("GET /"));
+    memset(uri + 5, 'a', WS_BUFFER_SIZE - 5);
+    WsRequest wreq = WsRequest_create(uri);
+    CU_ASSERT(wreq.method == REQ_ERROR_BUFFER_OVERFLOW);
+    CU_ASSERT(wreq.version == 0);
+}
+
 int main()
 {
     CU_initialize_registry();
@@ -208,6 +218,11 @@ int main()
     );
     CU_add_test(suite, "uri parsing error handling", request_uri_parse_error);
     CU_add_test(suite, "uri size error handling", request_uri_size_error);
+    CU_add_test(
+        suite,
+        "uri buffer overflow error handling",
+        request_buffer_overflow_error
+    );
     CU_basic_run_tests();
     CU_cleanup_registry();
     return 0;
