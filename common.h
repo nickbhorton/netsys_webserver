@@ -1,8 +1,9 @@
-#ifndef NBH_SERVER_HEADER
-#define NBH_SERVER_HEADER
+#ifndef NBH_COMMON_HEADER
+#define NBH_COMMON_HEADER
 
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/socket.h>
 
 #define WS_PATH_BUFFER_SIZE 1024
 #define WS_BUFFER_SIZE 2048
@@ -43,5 +44,15 @@ typedef struct {
  * If no error 'uri' will have a '\0' at the end for use of str*() funcitons.
  */
 WsRequest WsRequest_create(const char* from);
+
+typedef struct {
+    struct sockaddr_storage addr;
+    socklen_t addrlen;
+} Address;
+
+struct sockaddr* Address_sockaddr(Address* a);
+
+// returns socket file descriptor and fills address with bound address.
+int bind_socket(const char* addr, const char* port, Address* address_o);
 
 #endif

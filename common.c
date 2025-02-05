@@ -1,7 +1,14 @@
 #include "common.h"
+#include "debug_macros.h"
 
+#include <arpa/inet.h>
+#include <errno.h>
+#include <netdb.h>
 #include <stdbool.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 static bool is_whitespace(char c) { return c == ' '; }
 
@@ -140,4 +147,75 @@ WsRequest WsRequest_create(const char* from)
     }
 
     return rv;
+}
+
+int bind_socket(const char* addr, const char* port, Address* address)
+{
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+
+    hints.ai_family = AF_INET; // ipv4
+    hints.ai_socktype = SOCK_STREAM;
+    if (addr == NULL) {
+        hints.ai_flags = AI_PASSIVE;
+    }
+    const char* port_ext = port;
+    if (port == NULL) {
+        port_ext = "0";
+    }
+
+    struct addrinfo* address_info;
+    int rv;
+    rv = getaddrinfo(addr, port_ext, &hints, &address_info);
+    if (rv != 0) {
+        NP_DEBUG_ERR("getaddrinfo() error: %s\n", gai_strerror(rv));
+        return -1;
+    }
+
+    int fd = -1;
+
+    // linked list traversal vibe from beej.us
+    struct addrinfo* ptr;
+    for (ptr = address_info; ptr != NULL; ptr = ptr->ai_next) {
+        if ((fd = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol)) <
+            0) {
+            int en = errno;
+            NP_DEBUG_ERR("socket() error: %s\n", strerror(en));
+            continue; // next loop
+        }
+        if ((bind(fd, ptr->ai_addr, ptr->ai_addrlen)) < 0) {
+            int en = errno;
+            NP_DEBUG_ERR("bind() error: %s\n", strerror(en));
+            continue; // next loop
+        }
+        break;
+    }
+
+    if (ptr == NULL) {
+        NP_DEBUG_ERR("failed to find and bind a socket\n");
+        close(fd);
+        return -1;
+    }
+
+    // put success address into bound_sock
+    memcpy(&address->addr, ptr->ai_addr, ptr->ai_addrlen);
+    address->addrlen = ptr->ai_addrlen;
+
+    freeaddrinfo(address_info);
+
+    // setting sockopts
+    int yes = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
+        int en = errno;
+        NP_DEBUG_ERR("setsockopt() %s\n", strerror(en));
+        close(fd);
+        return -1;
+    }
+
+    return fd;
+}
+
+struct sockaddr* Address_sockaddr(Address* a)
+{
+    return (struct sockaddr*)&a->addr;
 }
