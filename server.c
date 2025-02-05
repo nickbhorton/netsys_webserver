@@ -21,6 +21,21 @@ int setup_signal_handlers();
 void sigchld_handler(int signal);
 void sigint_handler(int signal);
 
+void netprint(const char* buffer, size_t size)
+{
+    for (size_t i = 0; i < size; i++) {
+        if (buffer[i] == '\r') {
+            printf("\033[41mCR\033[0m");
+        } else if (buffer[i] == '\n') {
+            printf("\033[41mLF\033[0m\n");
+        } else if (buffer[i] == '\0') {
+            break;
+        } else {
+            printf("%c", buffer[i]);
+        }
+    }
+}
+
 int main(int argc, char** argv)
 {
     if (argc != 2) {
@@ -57,19 +72,22 @@ int main(int argc, char** argv)
             continue;
         }
         if (!fork()) {
+            close(sfd); // close listener
+
             char buffer[WS_BUFFER_SIZE];
             memset(buffer, 0, WS_BUFFER_SIZE);
-            rv = recv(clie_fd, buffer, WS_BUFFER_SIZE - 1, 0);
+            rv = recv(clie_fd, buffer, WS_BUFFER_SIZE, 0);
             if (rv < 0) {
                 int en = errno;
                 NP_DEBUG_ERR("recv() %s\n", strerror(en));
+                goto clean_exit;
             } else if (rv == 0) {
                 NP_DEBUG_ERR("client closed connection\n");
-            } else {
-                printf("%s", buffer);
+                goto clean_exit;
             }
+            netprint(buffer, WS_BUFFER_SIZE);
 
-            close(sfd); // close listener
+        clean_exit:
             shutdown(clie_fd, 2);
             exit(0);
         }

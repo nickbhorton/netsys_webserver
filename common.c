@@ -183,6 +183,13 @@ int bind_socket(const char* addr, const char* port, Address* address)
             NP_DEBUG_ERR("socket() error: %s\n", strerror(en));
             continue; // next loop
         }
+        int yes = 1;
+        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
+            int en = errno;
+            NP_DEBUG_ERR("setsockopt() %s\n", strerror(en));
+            close(fd);
+            continue;
+        }
         if ((bind(fd, ptr->ai_addr, ptr->ai_addrlen)) < 0) {
             int en = errno;
             NP_DEBUG_ERR("bind() error: %s\n", strerror(en));
@@ -194,6 +201,7 @@ int bind_socket(const char* addr, const char* port, Address* address)
     if (ptr == NULL) {
         NP_DEBUG_ERR("failed to find and bind a socket\n");
         close(fd);
+        freeaddrinfo(address_info);
         return -1;
     }
 
@@ -202,16 +210,6 @@ int bind_socket(const char* addr, const char* port, Address* address)
     address->addrlen = ptr->ai_addrlen;
 
     freeaddrinfo(address_info);
-
-    // setting sockopts
-    int yes = 1;
-    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
-        int en = errno;
-        NP_DEBUG_ERR("setsockopt() %s\n", strerror(en));
-        close(fd);
-        return -1;
-    }
-
     return fd;
 }
 
