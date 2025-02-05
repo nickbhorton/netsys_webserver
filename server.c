@@ -87,10 +87,8 @@ int main(int argc, char** argv)
             }
             WsRequest req = WsRequest_create(buffer);
             String response = response_header(&req);
-            // netprint(buffer, WS_BUFFER_SIZE);
+            netprint(buffer, WS_BUFFER_SIZE);
             rv = send(clie_fd, response.data, response.len, MSG_NOSIGNAL);
-            printf("after send\n");
-            fflush(stdout);
 
             String_free(&response);
             if (rv < 0) {
@@ -102,10 +100,10 @@ int main(int argc, char** argv)
             }
 
         clean_exit:
-            shutdown(clie_fd, 2);
+            close(clie_fd);
             exit(0);
         }
-        shutdown(clie_fd, 2);
+        shutdown(clie_fd, SHUT_RD);
     }
 }
 
