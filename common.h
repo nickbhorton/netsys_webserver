@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
+#include "String.h"
+
 #define WS_PATH_BUFFER_SIZE 1024
 #define WS_BUFFER_SIZE 2048
 
@@ -44,6 +46,7 @@ typedef struct {
  * If no error 'uri' will have a '\0' at the end for use of str*() funcitons.
  */
 WsRequest WsRequest_create(const char* from);
+String response_header(const WsRequest* req);
 
 typedef struct {
     struct sockaddr_storage addr;

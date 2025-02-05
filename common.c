@@ -149,6 +149,16 @@ WsRequest WsRequest_create(const char* from)
     return rv;
 }
 
+String response_header(const WsRequest* req) {
+    String ret = String_new();
+    String_push_cstr(&ret, "HTTP/1.1 200 OK\r\n");
+    String_push_cstr(&ret, "Content-Type: text/plain\r\n");
+    String_push_cstr(&ret, "Content-Length: 2\r\n");
+    String_push_cstr(&ret, "\r\n");
+    String_push_cstr(&ret, "Hi");
+    return ret;
+}
+
 int bind_socket(const char* addr, const char* port, Address* address)
 {
     struct addrinfo hints;

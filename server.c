@@ -85,7 +85,21 @@ int main(int argc, char** argv)
                 NP_DEBUG_ERR("client closed connection\n");
                 goto clean_exit;
             }
-            netprint(buffer, WS_BUFFER_SIZE);
+            WsRequest req = WsRequest_create(buffer);
+            String response = response_header(&req);
+            // netprint(buffer, WS_BUFFER_SIZE);
+            rv = send(clie_fd, response.data, response.len, MSG_NOSIGNAL);
+            printf("after send\n");
+            fflush(stdout);
+
+            String_free(&response);
+            if (rv < 0) {
+                int en = errno;
+                NP_DEBUG_ERR("send() %s\n", strerror(en));
+                goto clean_exit;
+            } else {
+                NP_DEBUG_MSG("send %i bytes to client\n", rv);
+            }
 
         clean_exit:
             shutdown(clie_fd, 2);
