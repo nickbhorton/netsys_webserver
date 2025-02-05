@@ -103,6 +103,7 @@ int main(int argc, char** argv)
             close(clie_fd);
             exit(0);
         }
+        // if parent shutdown(clie_fd, SHUT_WR) then childs pipe will break.
         shutdown(clie_fd, SHUT_RD);
     }
 }
