@@ -11,7 +11,7 @@
 
 #include "debug_macros.h"
 
-#define BACKLOG 10
+#define BACKLOG 128
 
 static int sfd = -1;
 static int cfd = -1;
@@ -78,6 +78,7 @@ int main(int argc, char** argv)
             close(sfd); // close listener
             char buffer[WS_BUFFER_SIZE];
             memset(buffer, 0, WS_BUFFER_SIZE);
+
             rv = recv(cfd, buffer, WS_BUFFER_SIZE, 0);
             if (rv < 0) {
                 int en = errno;
@@ -113,7 +114,9 @@ int main(int argc, char** argv)
             exit(0);
         }
         // if parent shutdown(clie_fd, SHUT_WR) then childs pipe will break.
-        shutdown(cfd, SHUT_RD);
+        // so child is responsable for shutting down the socket
+        close(cfd);
+        cfd = -1;
         NP_DEBUG_MSG("\e[32m%i\e[0m spun child\n", cpid);
     }
 }
@@ -143,6 +146,7 @@ void sigchld_handler(int signal)
 
 void sigint_handler(int signal)
 {
+    // TODO: make sure there are no open children
     int rv = shutdown(sfd, 2);
     if (rv < 0) {
         int en = errno;
