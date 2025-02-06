@@ -86,21 +86,19 @@ int main(int argc, char** argv)
                 goto clean_exit;
             }
             WsRequest req = WsRequest_create(buffer);
-            String response = response_header(&req);
-            netprint(buffer, WS_BUFFER_SIZE);
-            rv = send(clie_fd, response.data, response.len, MSG_NOSIGNAL);
+            // netprint(buffer, WS_BUFFER_SIZE);
 
+            String response = get_response(&req);
+            rv = send(clie_fd, response.data, response.len, MSG_NOSIGNAL);
             String_free(&response);
+
             if (rv < 0) {
                 int en = errno;
                 NP_DEBUG_ERR("send() %s\n", strerror(en));
                 goto clean_exit;
-            } else {
-                NP_DEBUG_MSG("send %i bytes to client\n", rv);
             }
-
         clean_exit:
-            close(clie_fd);
+            shutdown(clie_fd, SHUT_RDWR);
             exit(0);
         }
         // if parent shutdown(clie_fd, SHUT_WR) then childs pipe will break.

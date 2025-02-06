@@ -17,6 +17,7 @@ void String_free(String* s);
 char String_get(const String* s, size_t index);
 void String_set(String* s, size_t index, char c);
 
+void String_push_back(String* s, char c);
 void String_push_cstr(String* s, const char* cstr);
 
 #endif

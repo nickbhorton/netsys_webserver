@@ -27,6 +27,7 @@
 #define REQ_ERROR_URI_SIZE 253
 #define REQ_ERROR_VERSION_PARSE 252
 #define REQ_ERROR_BUFFER_OVERFLOW 251
+#define REQ_ERROR 250
 
 // Request Versions
 #define REQ_VERSION_1_0 1
@@ -46,7 +47,27 @@ typedef struct {
  * If no error 'uri' will have a '\0' at the end for use of str*() funcitons.
  */
 WsRequest WsRequest_create(const char* from);
-String response_header(const WsRequest* req);
+
+/* Translates the extention type to mime type.
+ *
+ * If error will return empty ""
+ */
+const char* get_content_type(const char* uri);
+
+/* TODO: this should be in a configuration specifies by the server user.
+ *
+ * Hardcodes uri translations like / -> /index.html
+ */
+const char* map_specific_uris(const char* uri);
+
+String get_response(const WsRequest* req);
+
+typedef struct {
+    bool valid;
+    size_t length;
+} FileInfo;
+
+FileInfo FileInfo_create(const char* filename);
 
 typedef struct {
     struct sockaddr_storage addr;

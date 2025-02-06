@@ -5,7 +5,7 @@
 
 #define FILE_COUNT 2
 
-void test_happy(void)
+void test_happy_parse(void)
 {
     const char methods[9][8] = {
         "GET",
@@ -200,11 +200,47 @@ void request_buffer_overflow_error(void)
     CU_ASSERT(wreq.version == 0);
 }
 
+void happy_content_type(void)
+{
+    const char tests[14][2][32] = {
+        {"/intex.html", "text/html"},
+        {"/intex.htm", "text/html"},
+        {"/test.html", "text/html"},
+        {"/test.txt", "text/plain"},
+        {"/helloworld.txt", "text/plain"},
+        {"/cat.png", "image/png"},
+        {"/testing.png", "image/png"},
+        {"/funny.gif", "image/gif"},
+        {"/mountain.jpg", "image/jpg"},
+        {"/application.ico", "image/x-icon"},
+        {"/styles.css", "text/css"},
+        {"/application.js", "application/javascript"},
+        {"/mat4.js", "application/javascript"},
+        {"/mat4.cpp", ""},
+    };
+    for (size_t i = 0; i < 14; i++) {
+        const char* content_type = get_content_type(tests[i][0]);
+        CU_ASSERT(strcmp(content_type, tests[i][1]) == 0);
+    }
+}
+
+void happy_map_specific_uris(void)
+{
+    const char tests[2][2][32] = {
+        {"/", "/index.html"},
+        {"/inside/", "/index.html"},
+    };
+    for (size_t i = 0; i < 2; i++) {
+        const char* test = map_specific_uris(tests[i][0]);
+        CU_ASSERT(strcmp(test, tests[i][1]) == 0);
+    }
+}
+
 int main()
 {
     CU_initialize_registry();
     CU_pSuite suite = CU_add_suite("WsRequestTestSuite", 0, 0);
-    CU_add_test(suite, "happy case", test_happy);
+    CU_add_test(suite, "happy case", test_happy_parse);
     CU_add_test(suite, "extra whitespace", test_extra_whitespace);
     CU_add_test(
         suite,
@@ -223,6 +259,9 @@ int main()
         "uri buffer overflow error handling",
         request_buffer_overflow_error
     );
+    CU_pSuite suite2 = CU_add_suite("WsResponseTestSuite", 0, 0);
+    CU_add_test(suite2, "get content type happy", happy_content_type);
+    CU_add_test(suite2, "map specific uris happy", happy_map_specific_uris);
     CU_basic_run_tests();
     CU_cleanup_registry();
     return 0;
