@@ -217,11 +217,10 @@ FileInfo FileInfo_create(const char* uri)
     int rv = stat(uri + 1, &st);
     if (rv < 0) {
         int en = errno;
-        NP_DEBUG_MSG("stat error with %s, %s\n", uri, strerror(en));
-        result.valid = false;
+        result.result = en;
         return result;
     }
-    result.valid = true;
+    result.result = 0;
     result.length = st.st_size;
     return result;
 }
@@ -243,9 +242,19 @@ String get_response(const WsRequest* req)
     }
     const char* processed_uri = map_specific_uris(req->uri);
     FileInfo fi = FileInfo_create(processed_uri);
-    if (!fi.valid) {
-        NP_DEBUG_MSG("404 Not Found: %s\n", processed_uri);
-        String_push_cstr(&ret, "HTTP/1.1 404 Not Found\r\n");
+    if (fi.result) {
+        if (fi.result == EACCES) {
+            // NP_DEBUG_MSG("403 Forbidden: %s\n", processed_uri);
+            String_push_cstr(&ret, "HTTP/1.1 403 Forbidden\r\n");
+            // file does not exist
+        } else if (fi.result == ENOENT) {
+            // NP_DEBUG_MSG("404 Not Found: %s\n", processed_uri);
+            String_push_cstr(&ret, "HTTP/1.1 404 Not Found\r\n");
+        } else {
+            // NP_DEBUG_MSG("fopen unexpected errno: %s\n",
+            // strerror(fi.result));
+            String_push_cstr(&ret, "HTTP/1.1 404 Not Found\r\n");
+        }
         return ret;
     }
     const char* content_type = get_content_type(processed_uri);
@@ -253,24 +262,25 @@ String get_response(const WsRequest* req)
         String_push_cstr(&ret, "HTTP/1.1 400 Bad Request\r\n");
         return ret;
     }
+
     FILE* fptr = fopen(processed_uri + 1, "r");
     if (fptr == NULL) {
         int en = errno;
         // permission error
         if (en == EACCES) {
-            NP_DEBUG_MSG("403 Forbidden: %s\n", processed_uri);
+            // NP_DEBUG_MSG("403 Forbidden: %s\n", processed_uri);
             String_push_cstr(&ret, "HTTP/1.1 403 Forbidden\r\n");
             // file does not exist
         } else if (en == ENOENT) {
-            NP_DEBUG_MSG("404 Not Found: %s\n", processed_uri);
+            // NP_DEBUG_MSG("404 Not Found: %s\n", processed_uri);
             String_push_cstr(&ret, "HTTP/1.1 404 Not Found\r\n");
         } else {
-            NP_DEBUG_MSG("fopen unexpected errno: %s\n", strerror(en));
+            // NP_DEBUG_MSG("fopen unexpected errno: %s\n", strerror(en));
             String_push_cstr(&ret, "HTTP/1.1 404 Not Found\r\n");
         }
         return ret;
     }
-    NP_DEBUG_MSG("200 OK: %s\n", processed_uri);
+    // NP_DEBUG_MSG("200 OK: %s\n", processed_uri);
     String_push_cstr(&ret, "HTTP/1.1 200 OK\r\n");
     String_push_cstr(&ret, "Content-Type: ");
     String_push_cstr(&ret, content_type);

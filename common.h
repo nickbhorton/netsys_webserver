@@ -63,7 +63,7 @@ const char* map_specific_uris(const char* uri);
 String get_response(const WsRequest* req);
 
 typedef struct {
-    bool valid;
+    int result;
     size_t length;
 } FileInfo;
 

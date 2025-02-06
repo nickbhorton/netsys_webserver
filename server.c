@@ -14,6 +14,8 @@
 #define BACKLOG 10
 
 static int sfd = -1;
+static int cfd = -1;
+static pid_t cpid = -1;
 
 void useage();
 
@@ -61,35 +63,44 @@ int main(int argc, char** argv)
 
     Address client_address;
     while (1) {
-        int clie_fd = accept(
+        cfd = accept(
             sfd,
             Address_sockaddr(&client_address),
             &client_address.addrlen
         );
-        if (clie_fd < 0) {
+        if (cfd < 0) {
             int en = errno;
             NP_DEBUG_ERR("accept() %s\n", strerror(en));
             continue;
         }
-        if (!fork()) {
+        if (!(cpid = fork())) {
+            cpid = getpid();
             close(sfd); // close listener
-
             char buffer[WS_BUFFER_SIZE];
             memset(buffer, 0, WS_BUFFER_SIZE);
-            rv = recv(clie_fd, buffer, WS_BUFFER_SIZE, 0);
+            rv = recv(cfd, buffer, WS_BUFFER_SIZE, 0);
             if (rv < 0) {
                 int en = errno;
                 NP_DEBUG_ERR("recv() %s\n", strerror(en));
                 goto clean_exit;
             } else if (rv == 0) {
-                NP_DEBUG_ERR("client closed connection\n");
+                NP_DEBUG_ERR("%i: client closed connection\n", cpid);
                 goto clean_exit;
             }
             WsRequest req = WsRequest_create(buffer);
             // netprint(buffer, WS_BUFFER_SIZE);
 
             String response = get_response(&req);
-            rv = send(clie_fd, response.data, response.len, MSG_NOSIGNAL);
+            rv = send(cfd, response.data, response.len, MSG_NOSIGNAL);
+            if (response.len > 0) {
+                NP_DEBUG_MSG("%i: ", cpid);
+                size_t i = 0;
+                while (response.data[i] != '\r' && i < response.len) {
+                    printf("%c", response.data[i]);
+                    i++;
+                }
+                printf("\n");
+            }
             String_free(&response);
 
             if (rv < 0) {
@@ -98,11 +109,12 @@ int main(int argc, char** argv)
                 goto clean_exit;
             }
         clean_exit:
-            shutdown(clie_fd, SHUT_RDWR);
+            shutdown(cfd, SHUT_RDWR);
             exit(0);
         }
         // if parent shutdown(clie_fd, SHUT_WR) then childs pipe will break.
-        shutdown(clie_fd, SHUT_RD);
+        shutdown(cfd, SHUT_RD);
+        NP_DEBUG_MSG("\e[32m%i\e[0m spun child\n", cpid);
     }
 }
 
@@ -120,10 +132,13 @@ void sigchld_handler(int signal)
     // -1 Indicates wait for any child.
     // WNOHANG means 'return immediately if no child exited' (from
     // linux.die.net)
-    while (waitpid(-1, NULL, WNOHANG) > 0)
-        ;
+    pid_t child_term_pid;
+    pid_t rv = 0;
+    while ((rv = waitpid(-1, NULL, WNOHANG)) > 0) {
+        child_term_pid = rv;
+    }
     errno = en;
-    NP_DEBUG_MSG("SIGCHLD recieved, reaped child\n");
+    NP_DEBUG_MSG("\e[31m%i\e[0m reaped child\n", child_term_pid);
 }
 
 void sigint_handler(int signal)
