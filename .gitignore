@@ -3,3 +3,5 @@ test
 server
 .clang-format
 
+www
+files.txt

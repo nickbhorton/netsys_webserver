@@ -1,10 +1,12 @@
 #include "common.h"
 
+#include <bits/types/idtype_t.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -74,41 +76,55 @@ int main(int argc, char** argv)
             continue;
         }
         if (!(cpid = fork())) {
-            cpid = getpid();
             close(sfd); // close listener
-            char buffer[WS_BUFFER_SIZE];
-            memset(buffer, 0, WS_BUFFER_SIZE);
+            cpid = getpid();
 
-            rv = recv(cfd, buffer, WS_BUFFER_SIZE, 0);
-            if (rv < 0) {
-                int en = errno;
-                NP_DEBUG_ERR("recv() %s\n", strerror(en));
-                goto clean_exit;
-            } else if (rv == 0) {
-                NP_DEBUG_ERR("%i: client closed connection\n", cpid);
-                goto clean_exit;
-            }
-            WsRequest req = WsRequest_create(buffer);
-            // netprint(buffer, WS_BUFFER_SIZE);
+            struct pollfd pfd[1];
+            pfd[0].fd = cfd;
+            pfd[0].events = POLLIN;
 
-            String response = get_response(&req);
-            rv = send(cfd, response.data, response.len, MSG_NOSIGNAL);
-            if (response.len > 0) {
-                NP_DEBUG_MSG("%i: ", cpid);
-                size_t i = 0;
-                while (response.data[i] != '\r' && i < response.len) {
-                    printf("%c", response.data[i]);
-                    i++;
+            char recv_buff[WS_BUFFER_SIZE];
+            memset(recv_buff, 0, WS_BUFFER_SIZE);
+
+            while (1) {
+                int num_events = poll(pfd, 1, WS_CHILD_TIMEOUT);
+                if (num_events == 0) {
+                    goto clean_exit;
                 }
-                printf("\n");
-            }
-            String_free(&response);
+                if (pfd[0].revents & POLLIN) {
+                    int recv_count = recv(cfd, recv_buff, WS_BUFFER_SIZE, 0);
+                    if (recv_count < 0) {
+                        int en = errno;
+                        NP_DEBUG_ERR("recv() %s\n", strerror(en));
+                        goto clean_exit;
+                    } else if (recv_count == 0) {
+                        NP_DEBUG_ERR("%i: client closed connection\n", cpid);
+                        goto clean_exit;
+                    }
+                    WsRequest req = WsRequest_create(recv_buff);
 
-            if (rv < 0) {
-                int en = errno;
-                NP_DEBUG_ERR("send() %s\n", strerror(en));
-                goto clean_exit;
+                    bool keepalive = keep_alive(recv_buff);
+                    String response = get_response(&req, keepalive);
+                    rv = send(cfd, response.data, response.len, MSG_NOSIGNAL);
+                    if (rv < 0) {
+                        int en = errno;
+                        NP_DEBUG_ERR("send() %s\n", strerror(en));
+                        goto clean_exit;
+                    }
+
+                    if (response.len) {
+                        NP_DEBUG_MSG("%i: %s\n", cpid, req.uri);
+                    }
+
+                    String_free(&response);
+                    // clear recv_buff
+                    memset(recv_buff, 0, recv_count);
+                    if (!keepalive) {
+                        goto clean_exit;
+                    }
+                }
             }
+
         clean_exit:
             shutdown(cfd, SHUT_RDWR);
             exit(0);
@@ -133,7 +149,7 @@ void sigchld_handler(int signal)
 {
     int en = errno;
     // -1 Indicates wait for any child.
-    // WNOHANG means 'return immediately if no child exited' (from
+    // WNOHANG means 'return immediately if no child has exited' (from
     // linux.die.net)
     pid_t child_term_pid;
     pid_t rv = 0;
@@ -146,7 +162,16 @@ void sigchld_handler(int signal)
 
 void sigint_handler(int signal)
 {
-    // TODO: make sure there are no open children
+    int child_pid = 0;
+    int status = 0;
+    while ((child_pid = wait(&status)) > 0) {
+        NP_DEBUG_MSG(
+            "\e[31m%i\e[0m reaped child at parent exit, status %i\n",
+            child_pid,
+            status
+        );
+    }
+
     int rv = shutdown(sfd, 2);
     if (rv < 0) {
         int en = errno;

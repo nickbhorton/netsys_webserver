@@ -224,14 +224,22 @@ void happy_content_type(void)
     }
 }
 
-void happy_map_specific_uris(void)
+void happy_sanitize_uri(void)
 {
-    const char tests[2][2][32] = {
-        {"/", "/index.html"},
-        {"/inside/", "/index.html"},
+    char tests[9][2][WS_URI_BUFFER_SIZE] = {
+        {"/images/apple_ex.png", "www/images/apple_ex.png"},
+        {"/css/style.css", "www/css/style.css"},
+        {"/fancybox/fancy_nav_left.png", "www/fancybox/fancy_nav_left.png"},
+        {"/fancybox/fancybox-y.png", "www/fancybox/fancybox-y.png"},
+        {"/fancybox/fancy_shadow_sw.png", "www/fancybox/fancy_shadow_sw.png"},
+        {"/fancybox/jquery.easing-1.3.pack.js",
+         "www/fancybox/jquery.easing-1.3.pack.js"},
+        {"/", "www/index.html"},
+        {"/inside/", "www/index.html"},
+        {"/test", "www/test"},
     };
     for (size_t i = 0; i < 2; i++) {
-        const char* test = map_specific_uris(tests[i][0]);
+        const char* test = sanitize_uri(tests[i][0]);
         CU_ASSERT(strcmp(test, tests[i][1]) == 0);
     }
 }
@@ -261,7 +269,7 @@ int main()
     );
     CU_pSuite suite2 = CU_add_suite("WsResponseTestSuite", 0, 0);
     CU_add_test(suite2, "get content type happy", happy_content_type);
-    CU_add_test(suite2, "map specific uris happy", happy_map_specific_uris);
+    CU_add_test(suite2, "map specific uris happy", happy_sanitize_uri);
     CU_basic_run_tests();
     CU_cleanup_registry();
     return 0;

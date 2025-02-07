@@ -152,13 +152,13 @@ WsRequest WsRequest_create(const char* from)
     return rv;
 }
 
-const char* get_content_type(const char* uri)
+const char* get_content_type(const char* sanitized_uri)
 {
     size_t dot_index = 0;
     bool found = false;
-    size_t len = strnlen(uri, WS_PATH_BUFFER_SIZE);
+    size_t len = strnlen(sanitized_uri, WS_PATH_BUFFER_SIZE);
     for (int i = len - 1; i > 0; i--) {
-        if (uri[i] == '.') {
+        if (sanitized_uri[i] == '.') {
             dot_index = i;
             found = true;
             break;
@@ -168,30 +168,31 @@ const char* get_content_type(const char* uri)
         return "\0";
     }
 
-    if (strncmp(uri + dot_index + 1, "html", 4) == 0 && dot_index + 5 == len) {
+    if (strncmp(sanitized_uri + dot_index + 1, "html", 4) == 0 &&
+        dot_index + 5 == len) {
         return "text/html";
-    } else if (strncmp(uri + dot_index + 1, "css", 3) == 0 &&
+    } else if (strncmp(sanitized_uri + dot_index + 1, "css", 3) == 0 &&
                dot_index + 4 == len) {
         return "text/css";
-    } else if (strncmp(uri + dot_index + 1, "htm", 3) == 0 &&
+    } else if (strncmp(sanitized_uri + dot_index + 1, "htm", 3) == 0 &&
                dot_index + 4 == len) {
         return "text/html";
-    } else if (strncmp(uri + dot_index + 1, "js", 2) == 0 &&
+    } else if (strncmp(sanitized_uri + dot_index + 1, "js", 2) == 0 &&
                dot_index + 3 == len) {
         return "application/javascript";
-    } else if (strncmp(uri + dot_index + 1, "txt", 3) == 0 &&
+    } else if (strncmp(sanitized_uri + dot_index + 1, "txt", 3) == 0 &&
                dot_index + 4 == len) {
         return "text/plain";
-    } else if (strncmp(uri + dot_index + 1, "png", 3) == 0 &&
+    } else if (strncmp(sanitized_uri + dot_index + 1, "png", 3) == 0 &&
                dot_index + 4 == len) {
         return "image/png";
-    } else if (strncmp(uri + dot_index + 1, "gif", 3) == 0 &&
+    } else if (strncmp(sanitized_uri + dot_index + 1, "gif", 3) == 0 &&
                dot_index + 4 == len) {
         return "image/gif";
-    } else if (strncmp(uri + dot_index + 1, "jpg", 3) == 0 &&
+    } else if (strncmp(sanitized_uri + dot_index + 1, "jpg", 3) == 0 &&
                dot_index + 4 == len) {
         return "image/jpg";
-    } else if (strncmp(uri + dot_index + 1, "ico", 3) == 0 &&
+    } else if (strncmp(sanitized_uri + dot_index + 1, "ico", 3) == 0 &&
                dot_index + 4 == len) {
         return "image/x-icon";
     } else {
@@ -199,13 +200,22 @@ const char* get_content_type(const char* uri)
     }
 }
 
-const char* map_specific_uris(const char* uri)
+const char* sanitize_uri(char* uri)
 {
+    // default stuff that should be moved to a config file
     if (strncmp("/\0", uri, 2) == 0) {
-        return "/index.html";
+        return "www/index.html";
     } else if (strncmp("/inside/\0", uri, 9) == 0) {
-        return "/index.html";
+        return "www/index.html";
     }
+    int uri_len = strnlen(uri, WS_PATH_BUFFER_SIZE);
+    int mnt_len = strlen(MNT_DIR);
+    for (int i = uri_len - 1; i >= 0; i--) {
+        uri[i + mnt_len] = uri[i];
+    }
+    uri[0] = MNT_DIR[0];
+    uri[1] = MNT_DIR[1];
+    uri[2] = MNT_DIR[2];
     return uri;
 }
 
@@ -213,8 +223,7 @@ FileInfo FileInfo_create(const char* uri)
 {
     struct stat st;
     FileInfo result = {};
-    // uri always starts with /
-    int rv = stat(uri + 1, &st);
+    int rv = stat(uri, &st);
     if (rv < 0) {
         int en = errno;
         result.result = en;
@@ -225,7 +234,27 @@ FileInfo FileInfo_create(const char* uri)
     return result;
 }
 
-String get_response(const WsRequest* req)
+bool keep_alive(char* request_buffer)
+{
+    const char* keep_alive_header = "Connection: keep-alive\r\n";
+    for (size_t i = 0; i < WS_BUFFER_SIZE - strlen(keep_alive_header) - 2;
+         i++) {
+        if (strncmp(request_buffer + i, "\r\n", 2) == 0) {
+            i += 2;
+            int rv = strncmp(
+                keep_alive_header,
+                request_buffer + i,
+                strlen(keep_alive_header)
+            );
+            if (rv == 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+String get_response(WsRequest* req, bool keepalive)
 {
     String ret = String_new();
     if (req->method >= REQ_ERROR) {
@@ -240,7 +269,7 @@ String get_response(const WsRequest* req)
         String_push_cstr(&ret, "HTTP/1.1 405 Method Not Allowed\r\n");
         return ret;
     }
-    const char* processed_uri = map_specific_uris(req->uri);
+    const char* processed_uri = sanitize_uri(req->uri);
     FileInfo fi = FileInfo_create(processed_uri);
     if (fi.result) {
         if (fi.result == EACCES) {
@@ -263,7 +292,7 @@ String get_response(const WsRequest* req)
         return ret;
     }
 
-    FILE* fptr = fopen(processed_uri + 1, "r");
+    FILE* fptr = fopen(processed_uri, "r");
     if (fptr == NULL) {
         int en = errno;
         // permission error
@@ -291,6 +320,11 @@ String get_response(const WsRequest* req)
     snprintf(buffer, 128, "%zu", fi.length);
     String_push_cstr(&ret, buffer);
     String_push_cstr(&ret, "\r\n");
+    if (keepalive) {
+        String_push_cstr(&ret, "Connection: keep-alive\r\n");
+    } else {
+        String_push_cstr(&ret, "Connection: close\r\n");
+    }
     String_push_cstr(&ret, "\r\n");
     int c;
     while ((c = fgetc(fptr)) != EOF) {

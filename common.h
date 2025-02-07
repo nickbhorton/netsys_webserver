@@ -7,8 +7,15 @@
 
 #include "String.h"
 
-#define WS_PATH_BUFFER_SIZE 1024
 #define WS_BUFFER_SIZE 2048
+
+#define WS_URI_BUFFER_SIZE 1024
+
+#define MNT_DIR "www"
+
+#define WS_PATH_BUFFER_SIZE 1021
+
+#define WS_CHILD_TIMEOUT 1000
 
 // Request Methods
 #define REQ_METHOD_GET 1
@@ -37,7 +44,7 @@
 typedef struct {
     uint8_t method;
     uint8_t version;
-    char uri[WS_PATH_BUFFER_SIZE];
+    char uri[WS_URI_BUFFER_SIZE];
 } WsRequest;
 
 /* Creates a WsRequest from some char*.
@@ -52,22 +59,25 @@ WsRequest WsRequest_create(const char* from);
  *
  * If error will return empty ""
  */
-const char* get_content_type(const char* uri);
+const char* get_content_type(const char* sanitized_uri);
 
 /* TODO: this should be in a configuration specifies by the server user.
  *
  * Hardcodes uri translations like / -> /index.html
+ * Also adds www to the front of uri
  */
-const char* map_specific_uris(const char* uri);
+const char* sanitize_uri(char* uri);
 
-String get_response(const WsRequest* req);
+String get_response(WsRequest* req, bool keepalive);
+
+bool keep_alive(char* request_buffer);
 
 typedef struct {
     int result;
     size_t length;
 } FileInfo;
 
-FileInfo FileInfo_create(const char* filename);
+FileInfo FileInfo_create(const char* sanitized_uri);
 
 typedef struct {
     struct sockaddr_storage addr;
