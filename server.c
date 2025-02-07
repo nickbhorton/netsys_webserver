@@ -113,7 +113,12 @@ int main(int argc, char** argv)
                     }
 
                     if (response.len) {
-                        NP_DEBUG_MSG("%i: %s\n", cpid, req.uri);
+                        NP_DEBUG_MSG(
+                            "%i: %s alive=%i\n",
+                            cpid,
+                            req.uri,
+                            keepalive
+                        );
                     }
 
                     String_free(&response);
