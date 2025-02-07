@@ -254,6 +254,46 @@ bool keep_alive(char* request_buffer)
     return false;
 }
 
+bool connection_keep_alive(char* request_buffer)
+{
+    const char* keep_alive_header = "Connection: keep-alive\r\n";
+    for (size_t i = 0; i < WS_BUFFER_SIZE - strlen(keep_alive_header) - 2;
+         i++) {
+        if (strncmp(request_buffer + i, "\r\n", 2) == 0) {
+            i += 2;
+            int rv = strncmp(
+                keep_alive_header,
+                request_buffer + i,
+                strlen(keep_alive_header)
+            );
+            if (rv == 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool connection_close(char* request_buffer)
+{
+    const char* keep_alive_header = "Connection: close\r\n";
+    for (size_t i = 0; i < WS_BUFFER_SIZE - strlen(keep_alive_header) - 2;
+         i++) {
+        if (strncmp(request_buffer + i, "\r\n", 2) == 0) {
+            i += 2;
+            int rv = strncmp(
+                keep_alive_header,
+                request_buffer + i,
+                strlen(keep_alive_header)
+            );
+            if (rv == 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 String get_response(WsRequest* req, bool keepalive)
 {
     String ret = String_new();

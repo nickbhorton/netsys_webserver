@@ -91,7 +91,7 @@ int main(int argc, char** argv)
                 if (num_events == 0) {
                     goto clean_exit;
                 }
-                if (pfd[0].revents & POLLIN) {
+                if (num_events > 0 && pfd[0].revents & POLLIN) {
                     int recv_count = recv(cfd, recv_buff, WS_BUFFER_SIZE, 0);
                     if (recv_count < 0) {
                         int en = errno;
@@ -103,8 +103,8 @@ int main(int argc, char** argv)
                     }
                     WsRequest req = WsRequest_create(recv_buff);
 
-                    bool keepalive = keep_alive(recv_buff);
-                    String response = get_response(&req, keepalive);
+                    bool close_connection = connection_close(recv_buff);
+                    String response = get_response(&req, !close_connection);
                     rv = send(cfd, response.data, response.len, MSG_NOSIGNAL);
                     if (rv < 0) {
                         int en = errno;
@@ -114,17 +114,17 @@ int main(int argc, char** argv)
 
                     if (response.len) {
                         NP_DEBUG_MSG(
-                            "%i: %s alive=%i\n",
+                            "%i: %s close=%i\n",
                             cpid,
                             req.uri,
-                            keepalive
+                            close_connection
                         );
                     }
 
                     String_free(&response);
                     // clear recv_buff
                     memset(recv_buff, 0, recv_count);
-                    if (!keepalive) {
+                    if (close_connection) {
                         goto clean_exit;
                     }
                 }

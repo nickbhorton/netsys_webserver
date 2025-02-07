@@ -70,7 +70,8 @@ const char* sanitize_uri(char* uri);
 
 String get_response(WsRequest* req, bool keepalive);
 
-bool keep_alive(char* request_buffer);
+bool connection_keep_alive(char* request_buffer);
+bool connection_close(char* request_buffer);
 
 typedef struct {
     int result;
