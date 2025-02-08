@@ -89,6 +89,7 @@ int main(int argc, char** argv)
             while (1) {
                 int num_events = poll(pfd, 1, WS_CHILD_TIMEOUT);
                 if (num_events == 0) {
+                    NP_DEBUG_MSG("%i: timeout\n", cpid);
                     goto clean_exit;
                 }
                 if (num_events > 0 && pfd[0].revents & POLLIN) {
@@ -104,7 +105,7 @@ int main(int argc, char** argv)
                     WsRequest req = WsRequest_create(recv_buff);
 
                     bool close_connection = connection_close(recv_buff);
-                    String response = get_response(&req, !close_connection);
+                    String response = get_response(&req, close_connection);
                     rv = send(cfd, response.data, response.len, MSG_NOSIGNAL);
                     if (rv < 0) {
                         int en = errno;
@@ -132,6 +133,8 @@ int main(int argc, char** argv)
 
         clean_exit:
             shutdown(cfd, SHUT_RDWR);
+            fflush(stdout);
+            fflush(stderr);
             exit(0);
         }
         // if parent shutdown(clie_fd, SHUT_WR) then childs pipe will break.

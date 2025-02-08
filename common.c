@@ -13,6 +13,18 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+static const char* HTTP_1_1 = "HTTP/1.1 ";
+static const char* HTTP_1_0 = "HTTP/1.0 ";
+
+static const char* HTTP_200 = "200 Ok\r\n";
+static const char* HTTP_400 = "400 Bad Request\r\n";
+static const char* HTTP_403 = "403 Forbidden\r\n";
+static const char* HTTP_404 = "404 Not Found\r\n";
+static const char* HTTP_405 = "405 Method Not Allowed\r\n";
+static const char* HTTP_414 = "414 URI Too Long\r\n";
+static const char* HTTP_500 = "500 Internal Sever Error\r\n";
+static const char* HTTP_505 = "505 HTTP Versoin Not Supported\r\n";
+
 static bool is_whitespace(char c) { return c == ' '; }
 
 WsRequest WsRequest_create(const char* from)
@@ -234,26 +246,6 @@ FileInfo FileInfo_create(const char* uri)
     return result;
 }
 
-bool keep_alive(char* request_buffer)
-{
-    const char* keep_alive_header = "Connection: keep-alive\r\n";
-    for (size_t i = 0; i < WS_BUFFER_SIZE - strlen(keep_alive_header) - 2;
-         i++) {
-        if (strncmp(request_buffer + i, "\r\n", 2) == 0) {
-            i += 2;
-            int rv = strncmp(
-                keep_alive_header,
-                request_buffer + i,
-                strlen(keep_alive_header)
-            );
-            if (rv == 0) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 bool connection_keep_alive(char* request_buffer)
 {
     const char* keep_alive_header = "Connection: keep-alive\r\n";
@@ -294,76 +286,105 @@ bool connection_close(char* request_buffer)
     return false;
 }
 
-String get_response(WsRequest* req, bool keepalive)
+static void
+response_file_error(int en, const char* http_version_str, String* response)
+{
+    switch (en) {
+    case EACCES:
+        String_push_cstr(response, http_version_str);
+        String_push_cstr(response, HTTP_403);
+        break;
+    case ENOENT:
+    default:
+        String_push_cstr(response, http_version_str);
+        String_push_cstr(response, HTTP_404);
+    }
+}
+
+String get_response(WsRequest* req, bool close)
 {
     String ret = String_new();
-    if (req->method >= REQ_ERROR) {
-        String_push_cstr(&ret, "HTTP/1.1 400 Bad Request\r\n");
-        return ret;
-    }
-    if (req->version != REQ_VERSION_1_1 && req->version != REQ_VERSION_1_0) {
-        String_push_cstr(&ret, "HTTP/1.1 505 HTTP Version Not Supported\r\n");
-        return ret;
-    }
-    if (req->method != REQ_METHOD_GET) {
-        String_push_cstr(&ret, "HTTP/1.1 405 Method Not Allowed\r\n");
-        return ret;
-    }
-    const char* processed_uri = sanitize_uri(req->uri);
-    FileInfo fi = FileInfo_create(processed_uri);
-    if (fi.result) {
-        if (fi.result == EACCES) {
-            // NP_DEBUG_MSG("403 Forbidden: %s\n", processed_uri);
-            String_push_cstr(&ret, "HTTP/1.1 403 Forbidden\r\n");
-            // file does not exist
-        } else if (fi.result == ENOENT) {
-            // NP_DEBUG_MSG("404 Not Found: %s\n", processed_uri);
-            String_push_cstr(&ret, "HTTP/1.1 404 Not Found\r\n");
-        } else {
-            // NP_DEBUG_MSG("fopen unexpected errno: %s\n",
-            // strerror(fi.result));
-            String_push_cstr(&ret, "HTTP/1.1 404 Not Found\r\n");
-        }
-        return ret;
-    }
-    const char* content_type = get_content_type(processed_uri);
-    if (strlen(content_type) == 0) {
-        String_push_cstr(&ret, "HTTP/1.1 400 Bad Request\r\n");
+    const char* http_version_str = HTTP_1_1;
+    if (req->version == REQ_VERSION_1_0) {
+        http_version_str = HTTP_1_0;
+    } else if (req->version == REQ_VERSION_1_1) {
+        http_version_str = HTTP_1_1;
+    } else {
+        // Version not supported
+        String_push_cstr(&ret, http_version_str);
+        String_push_cstr(&ret, HTTP_505);
         return ret;
     }
 
+    // some error happend with request parsing
+    if (req->method >= REQ_ERROR) {
+        switch (req->method) {
+        case REQ_ERROR_URI_SIZE:
+            String_push_cstr(&ret, http_version_str);
+            String_push_cstr(&ret, HTTP_414);
+            return ret;
+        case REQ_ERROR_BUFFER_OVERFLOW:
+            // request buffer overflow
+            String_push_cstr(&ret, http_version_str);
+            String_push_cstr(&ret, HTTP_500);
+            return ret;
+
+        case REQ_ERROR_URI_PARSE:
+        case REQ_ERROR_METHOD_PARSE:
+        case REQ_ERROR_VERSION_PARSE:
+        default:
+            String_push_cstr(&ret, http_version_str);
+            String_push_cstr(&ret, HTTP_400);
+            return ret;
+        }
+    }
+    // only support Get
+    if (req->method != REQ_METHOD_GET) {
+        String_push_cstr(&ret, http_version_str);
+        String_push_cstr(&ret, HTTP_405);
+        return ret;
+    }
+
+    const char* processed_uri = sanitize_uri(req->uri);
+    const char* content_type = get_content_type(processed_uri);
+    if (strlen(content_type) == 0) {
+        String_push_cstr(&ret, http_version_str);
+        String_push_cstr(&ret, HTTP_400);
+        return ret;
+    }
+
+    // get file size
+    FileInfo fi = FileInfo_create(processed_uri);
+    if (fi.result) {
+        response_file_error(fi.result, http_version_str, &ret);
+        return ret;
+    }
+
+    // check if file can be opened
     FILE* fptr = fopen(processed_uri, "r");
     if (fptr == NULL) {
         int en = errno;
-        // permission error
-        if (en == EACCES) {
-            // NP_DEBUG_MSG("403 Forbidden: %s\n", processed_uri);
-            String_push_cstr(&ret, "HTTP/1.1 403 Forbidden\r\n");
-            // file does not exist
-        } else if (en == ENOENT) {
-            // NP_DEBUG_MSG("404 Not Found: %s\n", processed_uri);
-            String_push_cstr(&ret, "HTTP/1.1 404 Not Found\r\n");
-        } else {
-            // NP_DEBUG_MSG("fopen unexpected errno: %s\n", strerror(en));
-            String_push_cstr(&ret, "HTTP/1.1 404 Not Found\r\n");
-        }
+        response_file_error(en, http_version_str, &ret);
         return ret;
     }
-    // NP_DEBUG_MSG("200 OK: %s\n", processed_uri);
-    String_push_cstr(&ret, "HTTP/1.1 200 OK\r\n");
+
+    String_push_cstr(&ret, http_version_str);
+    String_push_cstr(&ret, HTTP_200);
+
     String_push_cstr(&ret, "Content-Type: ");
     String_push_cstr(&ret, content_type);
     String_push_cstr(&ret, "\r\n");
+
     String_push_cstr(&ret, "Content-Length: ");
     char buffer[128];
     memset(buffer, 0, 128);
     snprintf(buffer, 128, "%zu", fi.length);
     String_push_cstr(&ret, buffer);
     String_push_cstr(&ret, "\r\n");
-    if (keepalive) {
-        String_push_cstr(&ret, "Connection: keep-alive\r\n");
-    } else {
+    if (close) {
         String_push_cstr(&ret, "Connection: close\r\n");
+    } else {
+        String_push_cstr(&ret, "Connection: keep-alive\r\n");
     }
     String_push_cstr(&ret, "\r\n");
     int c;
