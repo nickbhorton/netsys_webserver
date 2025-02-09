@@ -83,8 +83,7 @@ static size_t http_nlen(const char* src, size_t dflt)
     size_t rv = dflt;
     for (size_t i = 1; i < dflt; i++) {
         if (src[i - 1] == '\r' && src[i] == '\n') {
-            rv = i - 2;
-            break;
+            return i - 1;
         }
     }
     return rv;
@@ -164,6 +163,20 @@ HttpRequest HttpRequest_create(const char from[WS_BUFFER_SIZE])
     if (req.line.method > REQ_ERROR) {
         return req;
     }
+
+    size_t i = 0;
+    int rv = 0;
+    while (1) {
+        size_t header_len = http_nlen(from + i, WS_BUFFER_SIZE - i);
+        if (header_len + i >= WS_BUFFER_SIZE || header_len == 0) {
+            break;
+        }
+        // skip to next header
+        i += header_len + 2;
+        if ((rv = headers_connection_parse(from + i, WS_BUFFER_SIZE - i)) > 0) {
+            req.headers.connection = rv;
+        }
+    }
     return req;
 }
 
@@ -224,44 +237,25 @@ FileInfo FileInfo_create(const char* uri)
     return result;
 }
 
-bool connection_keep_alive(char* request_buffer)
+int headers_connection_parse(const char* from, size_t max_len)
 {
-    const char* keep_alive_header = "Connection: keep-alive\r\n";
-    for (size_t i = 0; i < WS_BUFFER_SIZE - strlen(keep_alive_header) - 2;
-         i++) {
-        if (strncmp(request_buffer + i, "\r\n", 2) == 0) {
-            i += 2;
-            int rv = strncmp(
-                keep_alive_header,
-                request_buffer + i,
-                strlen(keep_alive_header)
-            );
-            if (rv == 0) {
-                return true;
-            }
+    size_t start = 0;
+    while (is_whitespace(from[start])) {
+        start++;
+        if (from[start] == '\0') {
+            return 0;
         }
     }
-    return false;
-}
-
-bool connection_close(char* request_buffer)
-{
-    const char* keep_alive_header = "Connection: close\r\n";
-    for (size_t i = 0; i < WS_BUFFER_SIZE - strlen(keep_alive_header) - 2;
-         i++) {
-        if (strncmp(request_buffer + i, "\r\n", 2) == 0) {
-            i += 2;
-            int rv = strncmp(
-                keep_alive_header,
-                request_buffer + i,
-                strlen(keep_alive_header)
-            );
-            if (rv == 0) {
-                return true;
-            }
-        }
+    size_t header_len = http_nlen(from + start, max_len);
+    if (header_len == 0) {
+        return 0;
     }
-    return false;
+    if (strncmp(from + start, "Connection: keep-alive", header_len) == 0) {
+        return REQ_CONNECTION_KEEP_ALIVE;
+    } else if (strncmp(from + start, "Connection: close", header_len) == 0) {
+        return REQ_CONNECTION_CLOSE;
+    }
+    return 0;
 }
 
 static void
@@ -279,7 +273,7 @@ response_file_error(int en, const char* http_version_str, String* response)
     }
 }
 
-String get_response(HttpRequest* req, bool close)
+String get_response(HttpRequest* req)
 {
     String ret = String_new();
     const char* http_version_str = HTTP_1_1;
@@ -360,7 +354,7 @@ String get_response(HttpRequest* req, bool close)
     snprintf(buffer, 128, "%zu", fi.length);
     String_push_cstr(&ret, buffer);
     String_push_cstr(&ret, "\r\n");
-    if (close) {
+    if (req->headers.connection == REQ_CONNECTION_CLOSE) {
         String_push_cstr(&ret, "Connection: close\r\n");
     } else {
         String_push_cstr(&ret, "Connection: keep-alive\r\n");

@@ -240,10 +240,71 @@ void happy_sanitize_uri(void)
         {"/inside/", "www/index.html"},
         {"/test", "www/test"},
     };
-    for (size_t i = 0; i < 2; i++) {
+    for (size_t i = 0; i < 9; i++) {
         int rv = uri_to_path(tests[i][0]);
         CU_ASSERT(strcmp(tests[i][0], tests[i][1]) == 0);
         CU_ASSERT(rv == 0);
+    }
+}
+
+void happy_connection_parse_header(void)
+{
+    char tests[][WS_URI_BUFFER_SIZE] = {
+        "Connection: keep-alive\r\n",
+        "Connection: close\r\n",
+        "GET / HTTP/1.1\r\n",
+        "   Connection: keep-alive\r\n",
+        "  Connection: close\r\n",
+        ""
+    };
+    int ans[] = {
+        REQ_CONNECTION_KEEP_ALIVE,
+        REQ_CONNECTION_CLOSE,
+        0,
+        REQ_CONNECTION_KEEP_ALIVE,
+        REQ_CONNECTION_CLOSE,
+        0
+    };
+    for (size_t i = 0; i < sizeof(ans) / sizeof(int); i++) {
+        int rv = headers_connection_parse(tests[i], strlen(tests[i]));
+        CU_ASSERT(ans[i] == rv);
+    }
+}
+
+void happy_request_create()
+{
+    char tests[][WS_BUFFER_SIZE] = {
+        "GET / HTTP/1.1\r\nConnection: keep-alive\r\n\r\n",
+        "HEAD / HTTP/1.0\r\nConnection: close\r\n\r\n",
+        "PUT /testing.html HTTP/2.0\r\n   Connection: keep-alive\r\n\r\n",
+        "GET /my_proj/coolstuff.js HTTP/1.1\r\nConnection: close\r\n\r\n",
+    };
+    HttpRequest ans[] = {
+        {.line.method = REQ_METHOD_GET,
+         .line.uri = "/",
+         .line.version = REQ_VERSION_1_1,
+         .headers.connection = REQ_CONNECTION_KEEP_ALIVE},
+        {.line.method = REQ_METHOD_HEAD,
+         .line.uri = "/",
+         .line.version = REQ_VERSION_1_0,
+         .headers.connection = REQ_CONNECTION_CLOSE},
+        {.line.method = REQ_METHOD_PUT,
+         .line.uri = "/testing.html",
+         .line.version = REQ_VERSION_2_0,
+         .headers.connection = REQ_CONNECTION_KEEP_ALIVE},
+        {.line.method = REQ_METHOD_GET,
+         .line.uri = "/my_proj/coolstuff.js",
+         .line.version = REQ_VERSION_1_1,
+         .headers.connection = REQ_CONNECTION_CLOSE}
+    };
+    for (size_t i = 0; i < sizeof(ans) / sizeof(HttpRequest); i++) {
+        HttpRequest req = HttpRequest_create(tests[i]);
+        CU_ASSERT(ans[i].line.method == req.line.method);
+        CU_ASSERT(ans[i].line.version == req.line.version);
+        CU_ASSERT(ans[i].headers.connection == req.headers.connection);
+        CU_ASSERT(
+            0 == strncmp(ans[i].line.uri, req.line.uri, WS_URI_BUFFER_SIZE)
+        );
     }
 }
 
@@ -268,6 +329,12 @@ int main()
     CU_pSuite suite2 = CU_add_suite("WsResponseTestSuite", 0, 0);
     CU_add_test(suite2, "get content type happy", happy_content_type);
     CU_add_test(suite2, "map specific uris happy", happy_sanitize_uri);
+    CU_add_test(
+        suite2,
+        "connection parse header happy",
+        happy_connection_parse_header
+    );
+    CU_add_test(suite2, "http request create happy", happy_request_create);
     CU_basic_run_tests();
     CU_cleanup_registry();
     return 0;

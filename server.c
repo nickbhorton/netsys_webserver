@@ -104,8 +104,7 @@ int main(int argc, char** argv)
                     }
                     HttpRequest req = HttpRequest_create(recv_buff);
 
-                    bool close_connection = connection_close(recv_buff);
-                    String response = get_response(&req, close_connection);
+                    String response = get_response(&req);
                     rv = send(cfd, response.data, response.len, MSG_NOSIGNAL);
                     if (rv < 0) {
                         int en = errno;
@@ -115,17 +114,17 @@ int main(int argc, char** argv)
 
                     if (response.len) {
                         NP_DEBUG_MSG(
-                            "%i: %s close=%i\n",
+                            "%i: %s connection=%i\n",
                             cpid,
                             req.line.uri,
-                            close_connection
+                            req.headers.connection
                         );
                     }
 
                     String_free(&response);
                     // clear recv_buff
                     memset(recv_buff, 0, recv_count);
-                    if (close_connection) {
+                    if (req.headers.connection == REQ_CONNECTION_CLOSE) {
                         goto clean_exit;
                     }
                 }

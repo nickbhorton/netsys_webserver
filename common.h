@@ -34,6 +34,9 @@
 #define REQ_ERROR_URI_PARSE 254
 #define REQ_ERROR_URI_SIZE 253
 #define REQ_ERROR_VERSION_PARSE 252
+
+#define REQ_ERROR_HEADERS_PARSE 251
+
 #define REQ_ERROR 250
 
 // Request Versions
@@ -84,10 +87,9 @@ const char* get_content_type(const char* path);
  */
 int uri_to_path(char uri[WS_URI_BUFFER_SIZE]);
 
-String get_response(HttpRequest* req, bool keepalive);
+String get_response(HttpRequest* req);
 
-bool connection_keep_alive(char* request_buffer);
-bool connection_close(char* request_buffer);
+int headers_connection_parse(const char* from, size_t max_len);
 
 typedef struct {
     int result;
