@@ -67,7 +67,7 @@ void test_happy_parse(void)
                     "\r\n",
                     2
                 );
-                WsRequest wreq = WsRequest_create(req_buffer);
+                HttpRequestLine wreq = HttpRequestLine_create(req_buffer);
                 CU_ASSERT(wreq.method == method_nums[i]);
                 CU_ASSERT(wreq.version == version_nums[j]);
                 CU_ASSERT_FALSE(
@@ -142,7 +142,7 @@ void test_extra_whitespace(void)
                     sentinal,
                     strlen(sentinal)
                 );
-                WsRequest wreq = WsRequest_create(req_buffer);
+                HttpRequestLine wreq = HttpRequestLine_create(req_buffer);
                 CU_ASSERT(wreq.method == method_nums[i]);
                 CU_ASSERT(wreq.version == version_nums[j]);
                 CU_ASSERT_FALSE(
@@ -157,7 +157,7 @@ void test_extra_whitespace(void)
 void request_method_parse_error(void)
 {
     const char req[WS_BUFFER_SIZE] = "GT / HTTP/1.1\r\n";
-    WsRequest wreq = WsRequest_create(req);
+    HttpRequestLine wreq = HttpRequestLine_create(req);
     CU_ASSERT(wreq.method == REQ_ERROR_METHOD_PARSE);
     CU_ASSERT(wreq.version == 0);
 }
@@ -165,7 +165,7 @@ void request_method_parse_error(void)
 void request_version_parse_error(void)
 {
     const char req[WS_BUFFER_SIZE] = "GET / HTP/1.1\r\n";
-    WsRequest wreq = WsRequest_create(req);
+    HttpRequestLine wreq = HttpRequestLine_create(req);
     CU_ASSERT(wreq.method == REQ_ERROR_VERSION_PARSE);
     CU_ASSERT(wreq.version == 0);
 }
@@ -173,7 +173,7 @@ void request_version_parse_error(void)
 void request_uri_parse_error(void)
 {
     const char req[WS_BUFFER_SIZE] = "GET /HTTP/1.1\r\n";
-    WsRequest wreq = WsRequest_create(req);
+    HttpRequestLine wreq = HttpRequestLine_create(req);
     CU_ASSERT(wreq.method == REQ_ERROR_URI_PARSE);
     CU_ASSERT(wreq.version == 0);
 }
@@ -183,7 +183,7 @@ void request_uri_size_error(void)
     char uri[WS_BUFFER_SIZE];
     memcpy(uri, "GET /", strlen("GET /"));
     memset(uri + 5, 'a', WS_PATH_BUFFER_SIZE - 5);
-    WsRequest wreq = WsRequest_create(uri);
+    HttpRequestLine wreq = HttpRequestLine_create(uri);
     CU_ASSERT(wreq.method == REQ_ERROR_URI_SIZE);
     CU_ASSERT(wreq.version == 0);
 }

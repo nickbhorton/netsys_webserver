@@ -77,6 +77,7 @@ const int http_versions_index[HTTP_VERSION_COUNT] = {
 };
 
 static bool is_whitespace(char c) { return c == ' ' || c == '\r' || c == '\t'; }
+
 static size_t http_nlen(const char* src, size_t dflt)
 {
     size_t rv = dflt;
@@ -89,10 +90,10 @@ static size_t http_nlen(const char* src, size_t dflt)
     return rv;
 }
 
-WsRequest WsRequest_create(const char from[WS_BUFFER_SIZE])
+HttpRequestLine HttpRequestLine_create(const char from[WS_BUFFER_SIZE])
 {
     // initalize everything to 0
-    WsRequest rv = {};
+    HttpRequestLine rv = {};
 
     size_t request_line_len = http_nlen(from, WS_BUFFER_SIZE);
     if (request_line_len == WS_BUFFER_SIZE) {
@@ -268,7 +269,7 @@ response_file_error(int en, const char* http_version_str, String* response)
     }
 }
 
-String get_response(WsRequest* req, bool close)
+String get_response(HttpRequestLine* req, bool close)
 {
     String ret = String_new();
     const char* http_version_str = HTTP_1_1;

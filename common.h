@@ -13,6 +13,7 @@
 
 #define ROOT_DIR "www"
 
+// URI_BUFFER_SIZE - strlen(ROOT_DIR)
 #define WS_PATH_BUFFER_SIZE 1021
 
 #define WS_CHILD_TIMEOUT 1000
@@ -44,7 +45,19 @@ typedef struct {
     uint8_t method;
     uint8_t version;
     char uri[WS_URI_BUFFER_SIZE];
-} WsRequest;
+} HttpRequestLine;
+
+#define REQ_CONNECTION_KEEP_ALIVE 1
+#define REQ_CONNECTION_CLOSE 2
+
+typedef struct {
+    int connection;
+} HttpHeaders;
+
+typedef struct {
+    HttpRequestLine line;
+    HttpHeaders headers;
+} HttpRequest;
 
 /* Creates a WsRequest from some char*.
  * If WsRequest cannot be created then method will be set to the
@@ -52,7 +65,7 @@ typedef struct {
  *
  * If no error 'uri' will have a '\0' at the end for use of str*() funcitons.
  */
-WsRequest WsRequest_create(const char from[WS_BUFFER_SIZE]);
+HttpRequestLine HttpRequestLine_create(const char from[WS_BUFFER_SIZE]);
 
 /* Translates the extention type to mime type.
  *
@@ -69,7 +82,7 @@ const char* get_content_type(const char* path);
  */
 int uri_to_path(char uri[WS_URI_BUFFER_SIZE]);
 
-String get_response(WsRequest* req, bool keepalive);
+String get_response(HttpRequestLine* req, bool keepalive);
 
 bool connection_keep_alive(char* request_buffer);
 bool connection_close(char* request_buffer);

@@ -102,7 +102,7 @@ int main(int argc, char** argv)
                         NP_DEBUG_ERR("%i: client closed connection\n", cpid);
                         goto clean_exit;
                     }
-                    WsRequest req = WsRequest_create(recv_buff);
+                    HttpRequestLine req = HttpRequestLine_create(recv_buff);
 
                     bool close_connection = connection_close(recv_buff);
                     String response = get_response(&req, close_connection);
