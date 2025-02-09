@@ -33,7 +33,6 @@
 #define REQ_ERROR_URI_PARSE 254
 #define REQ_ERROR_URI_SIZE 253
 #define REQ_ERROR_VERSION_PARSE 252
-#define REQ_ERROR_BUFFER_OVERFLOW 251
 #define REQ_ERROR 250
 
 // Request Versions
@@ -53,20 +52,22 @@ typedef struct {
  *
  * If no error 'uri' will have a '\0' at the end for use of str*() funcitons.
  */
-WsRequest WsRequest_create(const char* from);
+WsRequest WsRequest_create(const char from[WS_BUFFER_SIZE]);
 
 /* Translates the extention type to mime type.
  *
  * If error will return empty ""
  */
-const char* get_content_type(const char* sanitized_uri);
+const char* get_content_type(const char* path);
 
 /* TODO: this should be in a configuration specifies by the server user.
  *
  * Hardcodes uri translations like / -> /index.html
  * Also adds www to the front of uri
+ *
+ * modifies uri in place.
  */
-const char* sanitize_uri(char* uri);
+int uri_to_path(char uri[WS_URI_BUFFER_SIZE]);
 
 String get_response(WsRequest* req, bool keepalive);
 

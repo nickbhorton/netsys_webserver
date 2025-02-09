@@ -19,4 +19,6 @@ String.o: String.c String.h
 server.o: server.c
 
 clean:
-	rm *.o
+	rm -f *.o
+	rm -f test
+	rm -f server

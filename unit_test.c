@@ -156,53 +156,41 @@ void test_extra_whitespace(void)
 
 void request_method_parse_error(void)
 {
-    WsRequest wreq = WsRequest_create(" GT / HTTP/1.1\r\n");
+    const char req[WS_BUFFER_SIZE] = "GT / HTTP/1.1\r\n";
+    WsRequest wreq = WsRequest_create(req);
     CU_ASSERT(wreq.method == REQ_ERROR_METHOD_PARSE);
     CU_ASSERT(wreq.version == 0);
 }
 
 void request_version_parse_error(void)
 {
-    WsRequest wreq = WsRequest_create(" GET / HTP/1.1\r\n");
+    const char req[WS_BUFFER_SIZE] = "GET / HTP/1.1\r\n";
+    WsRequest wreq = WsRequest_create(req);
     CU_ASSERT(wreq.method == REQ_ERROR_VERSION_PARSE);
     CU_ASSERT(wreq.version == 0);
 }
 
 void request_uri_parse_error(void)
 {
-    WsRequest wreq = WsRequest_create("GET /HTTP/1.1\r\n");
+    const char req[WS_BUFFER_SIZE] = "GET /HTTP/1.1\r\n";
+    WsRequest wreq = WsRequest_create(req);
     CU_ASSERT(wreq.method == REQ_ERROR_URI_PARSE);
     CU_ASSERT(wreq.version == 0);
 }
 
 void request_uri_size_error(void)
 {
-    char uri[WS_PATH_BUFFER_SIZE + 64];
+    char uri[WS_BUFFER_SIZE];
     memcpy(uri, "GET /", strlen("GET /"));
-    memset(uri + 5, 'a', WS_PATH_BUFFER_SIZE + 16);
-    memcpy(
-        uri + 4 + WS_PATH_BUFFER_SIZE + 16,
-        " HTTP/1.1\r\n",
-        strlen(" HTTP/1.1\r\n")
-    );
+    memset(uri + 5, 'a', WS_PATH_BUFFER_SIZE - 5);
     WsRequest wreq = WsRequest_create(uri);
     CU_ASSERT(wreq.method == REQ_ERROR_URI_SIZE);
     CU_ASSERT(wreq.version == 0);
 }
 
-void request_buffer_overflow_error(void)
-{
-    char uri[WS_BUFFER_SIZE + 2];
-    memcpy(uri, "GET /", strlen("GET /"));
-    memset(uri + 5, 'a', WS_BUFFER_SIZE - 5);
-    WsRequest wreq = WsRequest_create(uri);
-    CU_ASSERT(wreq.method == REQ_ERROR_BUFFER_OVERFLOW);
-    CU_ASSERT(wreq.version == 0);
-}
-
 void happy_content_type(void)
 {
-    const char tests[14][2][32] = {
+    const char tests[28][2][32] = {
         {"/intex.html", "text/html"},
         {"/intex.htm", "text/html"},
         {"/test.html", "text/html"},
@@ -217,8 +205,22 @@ void happy_content_type(void)
         {"/application.js", "application/javascript"},
         {"/mat4.js", "application/javascript"},
         {"/mat4.cpp", ""},
+        {"www/intex.html", "text/html"},
+        {"www/intex.htm", "text/html"},
+        {"www/test.html", "text/html"},
+        {"www/test.txt", "text/plain"},
+        {"www/helloworld.txt", "text/plain"},
+        {"www/cat.png", "image/png"},
+        {"www/testing.png", "image/png"},
+        {"www/funny.gif", "image/gif"},
+        {"www/mountain.jpg", "image/jpg"},
+        {"www/application.ico", "image/x-icon"},
+        {"www/styles.css", "text/css"},
+        {"www/application.js", "application/javascript"},
+        {"www/mat4.js", "application/javascript"},
+        {"www/mat4.cpp", ""},
     };
-    for (size_t i = 0; i < 14; i++) {
+    for (size_t i = 0; i < 28; i++) {
         const char* content_type = get_content_type(tests[i][0]);
         CU_ASSERT(strcmp(content_type, tests[i][1]) == 0);
     }
@@ -239,8 +241,9 @@ void happy_sanitize_uri(void)
         {"/test", "www/test"},
     };
     for (size_t i = 0; i < 2; i++) {
-        const char* test = sanitize_uri(tests[i][0]);
-        CU_ASSERT(strcmp(test, tests[i][1]) == 0);
+        int rv = uri_to_path(tests[i][0]);
+        CU_ASSERT(strcmp(tests[i][0], tests[i][1]) == 0);
+        CU_ASSERT(rv == 0);
     }
 }
 
@@ -262,11 +265,6 @@ int main()
     );
     CU_add_test(suite, "uri parsing error handling", request_uri_parse_error);
     CU_add_test(suite, "uri size error handling", request_uri_size_error);
-    CU_add_test(
-        suite,
-        "uri buffer overflow error handling",
-        request_buffer_overflow_error
-    );
     CU_pSuite suite2 = CU_add_suite("WsResponseTestSuite", 0, 0);
     CU_add_test(suite2, "get content type happy", happy_content_type);
     CU_add_test(suite2, "map specific uris happy", happy_sanitize_uri);

@@ -25,107 +25,116 @@ static const char* HTTP_414 = "414 URI Too Long\r\n";
 static const char* HTTP_500 = "500 Internal Sever Error\r\n";
 static const char* HTTP_505 = "505 HTTP Versoin Not Supported\r\n";
 
+#define CONTENT_TYPE_COUNT 11
+static char content_type_trans[CONTENT_TYPE_COUNT][2][64] = {
+    {"html", "text/html"},
+    {"css", "text/css"},
+    {"js", "application/javascript"},
+    {"htm", "text/html"},
+    {"jpg", "image/jpg"},
+    {"png", "image/png"},
+    {"webp", "image/webp"},
+    {"gif", "image/gif"},
+    {"txt", "text/plain"},
+    {"jpeg", "image/jpg"},
+    {"ico", "image/x-icon"},
+};
+
+#define HTTP_METHOD_COUNT 9
+const char http_methods[HTTP_METHOD_COUNT][8] = {
+    "GET",
+    "HEAD",
+    "OPTIONS",
+    "TRACE",
+    "PUT",
+    "DELETE",
+    "POST",
+    "PATCH",
+    "CONNECT"
+};
+const int http_methods_index[HTTP_METHOD_COUNT] = {
+    REQ_METHOD_GET,
+    REQ_METHOD_HEAD,
+    REQ_METHOD_OPTIONS,
+    REQ_METHOD_TRACE,
+    REQ_METHOD_PUT,
+    REQ_METHOD_DELETE,
+    REQ_METHOD_POST,
+    REQ_METHOD_PATCH,
+    REQ_METHOD_CONNECT,
+};
+
+#define HTTP_VERSION_COUNT 3
+const char http_version[HTTP_VERSION_COUNT][16] = {
+    "HTTP/1.0",
+    "HTTP/1.1",
+    "HTTP/2.0",
+};
+const int http_version_index[HTTP_VERSION_COUNT] = {
+    REQ_VERSION_1_0,
+    REQ_VERSION_1_1,
+    REQ_VERSION_2_0,
+};
+
 static bool is_whitespace(char c) { return c == ' '; }
 
-WsRequest WsRequest_create(const char* from)
+WsRequest WsRequest_create(const char from[WS_BUFFER_SIZE])
 {
     WsRequest rv = {.method = 0, .version = 0};
-    // TODO: is this needed in c99?
-    memset(rv.uri, 0, WS_PATH_BUFFER_SIZE);
+    memset(rv.uri, 0, WS_URI_BUFFER_SIZE);
 
-    size_t end_index = 0;
-    char prev = 0;
-    char curr = 0;
-    for (size_t i = 0; i < WS_BUFFER_SIZE; i++) {
-        curr = from[i];
-        if (prev == '\r' && curr == '\n') {
-            // put the end index at char befor "\r\n"
-            end_index = i - 2;
+    unsigned int request_line_len = WS_BUFFER_SIZE;
+    for (size_t i = 1; i < WS_BUFFER_SIZE; i++) {
+        if (from[i - 1] == '\r' && from[i] == '\n') {
+            request_line_len = i - 2;
             break;
         }
-        prev = curr;
     }
-    if (end_index == 0) {
-        rv.method = REQ_ERROR_BUFFER_OVERFLOW;
+    if (request_line_len == WS_BUFFER_SIZE) {
+        rv.method = REQ_ERROR_URI_SIZE;
         return rv;
     }
 
-    size_t curr_index = 0;
-    for (; curr_index < end_index; curr_index++) {
-        if (strncmp(from + curr_index, "GET", 3) == 0 &&
-            is_whitespace(from[curr_index + 3])) {
-            rv.method = REQ_METHOD_GET;
-            // goto whitespace
-            curr_index += 4;
-            break;
-        } else if (strncmp(from + curr_index, "HEAD", 4) == 0 &&
-                   is_whitespace(from[curr_index + 4])) {
-            rv.method = REQ_METHOD_HEAD;
-            curr_index += 5;
-            break;
-        } else if (strncmp(from + curr_index, "OPTIONS", 7) == 0 &&
-                   is_whitespace(from[curr_index + 7])) {
-            rv.method = REQ_METHOD_OPTIONS;
-            curr_index += 8;
-            break;
-        } else if (strncmp(from + curr_index, "TRACE", 5) == 0 &&
-                   is_whitespace(from[curr_index + 5])) {
-            rv.method = REQ_METHOD_TRACE;
-            curr_index += 6;
-            break;
-        } else if (strncmp(from + curr_index, "PUT", 3) == 0 &&
-                   is_whitespace(from[curr_index + 3])) {
-            rv.method = REQ_METHOD_PUT;
-            curr_index += 4;
-            break;
-        } else if (strncmp(from + curr_index, "DELETE", 6) == 0 &&
-                   is_whitespace(from[curr_index + 6])) {
-            rv.method = REQ_METHOD_DELETE;
-            curr_index += 7;
-            break;
-        } else if (strncmp(from + curr_index, "POST", 4) == 0 &&
-                   is_whitespace(from[curr_index + 4])) {
-            rv.method = REQ_METHOD_POST;
-            curr_index += 5;
-            break;
-        } else if (strncmp(from + curr_index, "PATCH", 5) == 0 &&
-                   is_whitespace(from[curr_index + 5])) {
-            rv.method = REQ_METHOD_PATCH;
-            curr_index += 6;
-            break;
-        } else if (strncmp(from + curr_index, "CONNECT", 7) == 0 &&
-                   is_whitespace(from[curr_index + 7])) {
-            rv.method = REQ_METHOD_CONNECT;
-            curr_index += 8;
-            break;
+    unsigned int i = 0;
+    for (; i < request_line_len; i++) {
+        for (size_t j = 0; j < HTTP_METHOD_COUNT; j++) {
+            unsigned int method_len = strlen(http_methods[j]);
+            if (strncmp(from + i, http_methods[j], method_len) == 0 &&
+                is_whitespace(from[i + method_len])) {
+                rv.method = http_methods_index[j];
+                i += method_len + 1;
+                goto http_method_done;
+            }
         }
     }
-    if (curr_index == end_index || rv.method == 0) {
+
+http_method_done:
+    if (rv.method == 0) {
         rv.method = REQ_ERROR_METHOD_PARSE;
         return rv;
     }
 
     size_t uri_start_index = 0;
-    for (; curr_index < end_index; curr_index++) {
-        if (from[curr_index] == '/') {
-            uri_start_index = curr_index;
+    for (; i < request_line_len; i++) {
+        if (from[i] == '/') {
+            uri_start_index = i;
             break;
         }
     }
-    if (curr_index == end_index || uri_start_index == 0) {
+    if (i == request_line_len || uri_start_index == 0) {
         rv.method = REQ_ERROR_URI_PARSE;
         return rv;
     }
 
     size_t uri_end_index = 0;
-    for (; curr_index < end_index; curr_index++) {
-        if (is_whitespace(from[curr_index])) {
+    for (; i < request_line_len; i++) {
+        if (is_whitespace(from[i])) {
             // put uri_end_index at char befor whitespace
-            uri_end_index = curr_index - 1;
+            uri_end_index = i - 1;
             break;
         }
     }
-    if (curr_index == end_index || uri_end_index == 0 ||
+    if (i == request_line_len || uri_end_index == 0 ||
         uri_end_index < uri_start_index) {
         rv.method = REQ_ERROR_URI_PARSE;
         return rv;
@@ -138,20 +147,17 @@ WsRequest WsRequest_create(const char* from)
     }
     memcpy(rv.uri, from + uri_start_index, uri_size);
 
-    for (; curr_index < end_index; curr_index++) {
-        if (strncmp(from + curr_index, "HTTP/1.0", 8) == 0 &&
-            (is_whitespace(from[curr_index + 8]) || curr_index + 7 == end_index
-            )) {
+    for (; i < request_line_len; i++) {
+        if (strncmp(from + i, "HTTP/1.0", 8) == 0 &&
+            (is_whitespace(from[i + 8]) || i + 7 == request_line_len)) {
             rv.version = REQ_VERSION_1_0;
             break;
-        } else if (strncmp(from + curr_index, "HTTP/1.1", 8) == 0 &&
-                   (is_whitespace(from[curr_index + 8]) ||
-                    curr_index + 7 == end_index)) {
+        } else if (strncmp(from + i, "HTTP/1.1", 8) == 0 &&
+                   (is_whitespace(from[i + 8]) || i + 7 == request_line_len)) {
             rv.version = REQ_VERSION_1_1;
             break;
-        } else if (strncmp(from + curr_index, "HTTP/2.0", 8) == 0 &&
-                   (is_whitespace(from[curr_index + 8]) ||
-                    curr_index + 7 == end_index)) {
+        } else if (strncmp(from + i, "HTTP/2.0", 8) == 0 &&
+                   (is_whitespace(from[i + 8]) || i + 7 == request_line_len)) {
             rv.version = REQ_VERSION_2_0;
             break;
         }
@@ -164,71 +170,46 @@ WsRequest WsRequest_create(const char* from)
     return rv;
 }
 
-const char* get_content_type(const char* sanitized_uri)
+const char* get_content_type(const char* path)
 {
-    size_t dot_index = 0;
-    bool found = false;
-    size_t len = strnlen(sanitized_uri, WS_PATH_BUFFER_SIZE);
-    for (int i = len - 1; i > 0; i--) {
-        if (sanitized_uri[i] == '.') {
+    size_t dot_index = WS_PATH_BUFFER_SIZE;
+    size_t path_len = strnlen(path, WS_PATH_BUFFER_SIZE);
+    for (int i = ((int)path_len) - 1; i > 0; i--) {
+        if (path[i] == '.') {
             dot_index = i;
-            found = true;
             break;
         }
     }
-    if (!found) {
-        return "\0";
+    if (dot_index == WS_PATH_BUFFER_SIZE) {
+        return "";
     }
 
-    if (strncmp(sanitized_uri + dot_index + 1, "html", 4) == 0 &&
-        dot_index + 5 == len) {
-        return "text/html";
-    } else if (strncmp(sanitized_uri + dot_index + 1, "css", 3) == 0 &&
-               dot_index + 4 == len) {
-        return "text/css";
-    } else if (strncmp(sanitized_uri + dot_index + 1, "htm", 3) == 0 &&
-               dot_index + 4 == len) {
-        return "text/html";
-    } else if (strncmp(sanitized_uri + dot_index + 1, "js", 2) == 0 &&
-               dot_index + 3 == len) {
-        return "application/javascript";
-    } else if (strncmp(sanitized_uri + dot_index + 1, "txt", 3) == 0 &&
-               dot_index + 4 == len) {
-        return "text/plain";
-    } else if (strncmp(sanitized_uri + dot_index + 1, "png", 3) == 0 &&
-               dot_index + 4 == len) {
-        return "image/png";
-    } else if (strncmp(sanitized_uri + dot_index + 1, "gif", 3) == 0 &&
-               dot_index + 4 == len) {
-        return "image/gif";
-    } else if (strncmp(sanitized_uri + dot_index + 1, "jpg", 3) == 0 &&
-               dot_index + 4 == len) {
-        return "image/jpg";
-    } else if (strncmp(sanitized_uri + dot_index + 1, "ico", 3) == 0 &&
-               dot_index + 4 == len) {
-        return "image/x-icon";
-    } else {
-        return "\0";
+    for (size_t i = 0; i < CONTENT_TYPE_COUNT; i++) {
+        if (strncmp(
+                path + dot_index + 1,
+                content_type_trans[i][0],
+                WS_PATH_BUFFER_SIZE - (dot_index + 1)
+            ) == 0) {
+            return content_type_trans[i][1];
+        }
     }
+    return "";
 }
 
-const char* sanitize_uri(char* uri)
+int uri_to_path(char uri[WS_URI_BUFFER_SIZE])
 {
-    // default stuff that should be moved to a config file
-    if (strncmp("/\0", uri, 2) == 0) {
-        return "www/index.html";
-    } else if (strncmp("/inside/\0", uri, 9) == 0) {
-        return "www/index.html";
+    unsigned int root_len = strlen(MNT_DIR);
+    if (strncmp("/", uri, WS_URI_BUFFER_SIZE) == 0 ||
+        strncmp("/inside/", uri, WS_URI_BUFFER_SIZE) == 0) {
+        const char* default_path = "/index.html";
+        memcpy(uri, MNT_DIR, root_len);
+        memcpy(uri + root_len, default_path, strlen(default_path));
+        return 0;
     }
-    int uri_len = strnlen(uri, WS_PATH_BUFFER_SIZE);
-    int mnt_len = strlen(MNT_DIR);
-    for (int i = uri_len - 1; i >= 0; i--) {
-        uri[i + mnt_len] = uri[i];
-    }
-    uri[0] = MNT_DIR[0];
-    uri[1] = MNT_DIR[1];
-    uri[2] = MNT_DIR[2];
-    return uri;
+    unsigned int uri_len = strnlen(uri, WS_PATH_BUFFER_SIZE);
+    memmove(uri + root_len, uri, uri_len);
+    memcpy(uri, MNT_DIR, root_len);
+    return 0;
 }
 
 FileInfo FileInfo_create(const char* uri)
@@ -323,11 +304,6 @@ String get_response(WsRequest* req, bool close)
             String_push_cstr(&ret, http_version_str);
             String_push_cstr(&ret, HTTP_414);
             return ret;
-        case REQ_ERROR_BUFFER_OVERFLOW:
-            // request buffer overflow
-            String_push_cstr(&ret, http_version_str);
-            String_push_cstr(&ret, HTTP_500);
-            return ret;
 
         case REQ_ERROR_URI_PARSE:
         case REQ_ERROR_METHOD_PARSE:
@@ -345,8 +321,14 @@ String get_response(WsRequest* req, bool close)
         return ret;
     }
 
-    const char* processed_uri = sanitize_uri(req->uri);
-    const char* content_type = get_content_type(processed_uri);
+    int rv = uri_to_path(req->uri);
+    if (rv < 0) {
+        String_push_cstr(&ret, http_version_str);
+        String_push_cstr(&ret, HTTP_500);
+        return ret;
+    }
+
+    const char* content_type = get_content_type(req->uri);
     if (strlen(content_type) == 0) {
         String_push_cstr(&ret, http_version_str);
         String_push_cstr(&ret, HTTP_400);
@@ -354,14 +336,14 @@ String get_response(WsRequest* req, bool close)
     }
 
     // get file size
-    FileInfo fi = FileInfo_create(processed_uri);
+    FileInfo fi = FileInfo_create(req->uri);
     if (fi.result) {
         response_file_error(fi.result, http_version_str, &ret);
         return ret;
     }
 
     // check if file can be opened
-    FILE* fptr = fopen(processed_uri, "r");
+    FILE* fptr = fopen(req->uri, "r");
     if (fptr == NULL) {
         int en = errno;
         response_file_error(en, http_version_str, &ret);
