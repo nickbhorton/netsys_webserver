@@ -11,7 +11,7 @@
 
 #define WS_URI_BUFFER_SIZE 1024
 
-#define MNT_DIR "www"
+#define ROOT_DIR "www"
 
 #define WS_PATH_BUFFER_SIZE 1021
 

@@ -65,31 +65,36 @@ const int http_methods_index[HTTP_METHOD_COUNT] = {
 };
 
 #define HTTP_VERSION_COUNT 3
-const char http_version[HTTP_VERSION_COUNT][16] = {
+const char http_versions[HTTP_VERSION_COUNT][16] = {
     "HTTP/1.0",
     "HTTP/1.1",
     "HTTP/2.0",
 };
-const int http_version_index[HTTP_VERSION_COUNT] = {
+const int http_versions_index[HTTP_VERSION_COUNT] = {
     REQ_VERSION_1_0,
     REQ_VERSION_1_1,
     REQ_VERSION_2_0,
 };
 
-static bool is_whitespace(char c) { return c == ' '; }
-
-WsRequest WsRequest_create(const char from[WS_BUFFER_SIZE])
+static bool is_whitespace(char c) { return c == ' ' || c == '\r' || c == '\t'; }
+static size_t http_nlen(const char* src, size_t dflt)
 {
-    WsRequest rv = {.method = 0, .version = 0};
-    memset(rv.uri, 0, WS_URI_BUFFER_SIZE);
-
-    unsigned int request_line_len = WS_BUFFER_SIZE;
-    for (size_t i = 1; i < WS_BUFFER_SIZE; i++) {
-        if (from[i - 1] == '\r' && from[i] == '\n') {
-            request_line_len = i - 2;
+    size_t rv = dflt;
+    for (size_t i = 1; i < dflt; i++) {
+        if (src[i - 1] == '\r' && src[i] == '\n') {
+            rv = i - 2;
             break;
         }
     }
+    return rv;
+}
+
+WsRequest WsRequest_create(const char from[WS_BUFFER_SIZE])
+{
+    // initalize everything to 0
+    WsRequest rv = {};
+
+    size_t request_line_len = http_nlen(from, WS_BUFFER_SIZE);
     if (request_line_len == WS_BUFFER_SIZE) {
         rv.method = REQ_ERROR_URI_SIZE;
         return rv;
@@ -115,58 +120,39 @@ http_method_done:
     }
 
     size_t uri_start_index = 0;
-    for (; i < request_line_len; i++) {
-        if (from[i] == '/') {
-            uri_start_index = i;
-            break;
-        }
-    }
-    if (i == request_line_len || uri_start_index == 0) {
-        rv.method = REQ_ERROR_URI_PARSE;
-        return rv;
-    }
-
     size_t uri_end_index = 0;
     for (; i < request_line_len; i++) {
-        if (is_whitespace(from[i])) {
-            // put uri_end_index at char befor whitespace
-            uri_end_index = i - 1;
+        if (!is_whitespace(from[i]) && uri_start_index == 0) {
+            uri_start_index = i;
+        } else if (is_whitespace(from[i]) && uri_start_index != 0) {
+            uri_end_index = i;
             break;
         }
     }
-    if (i == request_line_len || uri_end_index == 0 ||
-        uri_end_index < uri_start_index) {
+    if (uri_end_index == 0 || uri_start_index == 0) {
         rv.method = REQ_ERROR_URI_PARSE;
         return rv;
     }
 
-    size_t uri_size = (uri_end_index + 1) - uri_start_index;
-    if (uri_size > WS_PATH_BUFFER_SIZE) {
-        rv.method = REQ_ERROR_URI_SIZE;
-        return rv;
-    }
-    memcpy(rv.uri, from + uri_start_index, uri_size);
+    memcpy(rv.uri, from + uri_start_index, uri_end_index - uri_start_index);
 
     for (; i < request_line_len; i++) {
-        if (strncmp(from + i, "HTTP/1.0", 8) == 0 &&
-            (is_whitespace(from[i + 8]) || i + 7 == request_line_len)) {
-            rv.version = REQ_VERSION_1_0;
-            break;
-        } else if (strncmp(from + i, "HTTP/1.1", 8) == 0 &&
-                   (is_whitespace(from[i + 8]) || i + 7 == request_line_len)) {
-            rv.version = REQ_VERSION_1_1;
-            break;
-        } else if (strncmp(from + i, "HTTP/2.0", 8) == 0 &&
-                   (is_whitespace(from[i + 8]) || i + 7 == request_line_len)) {
-            rv.version = REQ_VERSION_2_0;
-            break;
+        for (size_t j = 0; j < HTTP_VERSION_COUNT; j++) {
+            unsigned int version_len = strlen(http_versions[j]);
+            if (strncmp(from + i, http_versions[j], version_len) == 0 &&
+                is_whitespace(from[i + version_len])) {
+                rv.version = http_methods_index[j];
+                i += version_len + 1;
+                goto http_version_done;
+            }
         }
     }
+
+http_version_done:
     if (rv.version == 0) {
         rv.method = REQ_ERROR_VERSION_PARSE;
         return rv;
     }
-
     return rv;
 }
 
@@ -198,17 +184,17 @@ const char* get_content_type(const char* path)
 
 int uri_to_path(char uri[WS_URI_BUFFER_SIZE])
 {
-    unsigned int root_len = strlen(MNT_DIR);
+    unsigned int root_len = strlen(ROOT_DIR);
     if (strncmp("/", uri, WS_URI_BUFFER_SIZE) == 0 ||
         strncmp("/inside/", uri, WS_URI_BUFFER_SIZE) == 0) {
         const char* default_path = "/index.html";
-        memcpy(uri, MNT_DIR, root_len);
+        memcpy(uri, ROOT_DIR, root_len);
         memcpy(uri + root_len, default_path, strlen(default_path));
         return 0;
     }
     unsigned int uri_len = strnlen(uri, WS_PATH_BUFFER_SIZE);
     memmove(uri + root_len, uri, uri_len);
-    memcpy(uri, MNT_DIR, root_len);
+    memcpy(uri, ROOT_DIR, root_len);
     return 0;
 }
 
