@@ -102,7 +102,7 @@ int main(int argc, char** argv)
                         NP_DEBUG_ERR("%i: client closed connection\n", cpid);
                         goto clean_exit;
                     }
-                    HttpRequestLine req = HttpRequestLine_create(recv_buff);
+                    HttpRequest req = HttpRequest_create(recv_buff);
 
                     bool close_connection = connection_close(recv_buff);
                     String response = get_response(&req, close_connection);
@@ -117,7 +117,7 @@ int main(int argc, char** argv)
                         NP_DEBUG_MSG(
                             "%i: %s close=%i\n",
                             cpid,
-                            req.uri,
+                            req.line.uri,
                             close_connection
                         );
                     }

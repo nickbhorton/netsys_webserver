@@ -67,6 +67,8 @@ typedef struct {
  */
 HttpRequestLine HttpRequestLine_create(const char from[WS_BUFFER_SIZE]);
 
+HttpRequest HttpRequest_create(const char from[WS_BUFFER_SIZE]);
+
 /* Translates the extention type to mime type.
  *
  * If error will return empty ""
@@ -82,7 +84,7 @@ const char* get_content_type(const char* path);
  */
 int uri_to_path(char uri[WS_URI_BUFFER_SIZE]);
 
-String get_response(HttpRequestLine* req, bool keepalive);
+String get_response(HttpRequest* req, bool keepalive);
 
 bool connection_keep_alive(char* request_buffer);
 bool connection_close(char* request_buffer);

@@ -157,6 +157,16 @@ http_version_done:
     return rv;
 }
 
+HttpRequest HttpRequest_create(const char from[WS_BUFFER_SIZE])
+{
+    HttpRequest req = {};
+    req.line = HttpRequestLine_create(from);
+    if (req.line.method > REQ_ERROR) {
+        return req;
+    }
+    return req;
+}
+
 const char* get_content_type(const char* path)
 {
     size_t dot_index = WS_PATH_BUFFER_SIZE;
@@ -269,13 +279,13 @@ response_file_error(int en, const char* http_version_str, String* response)
     }
 }
 
-String get_response(HttpRequestLine* req, bool close)
+String get_response(HttpRequest* req, bool close)
 {
     String ret = String_new();
     const char* http_version_str = HTTP_1_1;
-    if (req->version == REQ_VERSION_1_0) {
+    if (req->line.version == REQ_VERSION_1_0) {
         http_version_str = HTTP_1_0;
-    } else if (req->version == REQ_VERSION_1_1) {
+    } else if (req->line.version == REQ_VERSION_1_1) {
         http_version_str = HTTP_1_1;
     } else {
         // Version not supported
@@ -285,8 +295,8 @@ String get_response(HttpRequestLine* req, bool close)
     }
 
     // some error happend with request parsing
-    if (req->method >= REQ_ERROR) {
-        switch (req->method) {
+    if (req->line.method >= REQ_ERROR) {
+        switch (req->line.method) {
         case REQ_ERROR_URI_SIZE:
             String_push_cstr(&ret, http_version_str);
             String_push_cstr(&ret, HTTP_414);
@@ -302,20 +312,20 @@ String get_response(HttpRequestLine* req, bool close)
         }
     }
     // only support Get
-    if (req->method != REQ_METHOD_GET) {
+    if (req->line.method != REQ_METHOD_GET) {
         String_push_cstr(&ret, http_version_str);
         String_push_cstr(&ret, HTTP_405);
         return ret;
     }
 
-    int rv = uri_to_path(req->uri);
+    int rv = uri_to_path(req->line.uri);
     if (rv < 0) {
         String_push_cstr(&ret, http_version_str);
         String_push_cstr(&ret, HTTP_500);
         return ret;
     }
 
-    const char* content_type = get_content_type(req->uri);
+    const char* content_type = get_content_type(req->line.uri);
     if (strlen(content_type) == 0) {
         String_push_cstr(&ret, http_version_str);
         String_push_cstr(&ret, HTTP_400);
@@ -323,14 +333,14 @@ String get_response(HttpRequestLine* req, bool close)
     }
 
     // get file size
-    FileInfo fi = FileInfo_create(req->uri);
+    FileInfo fi = FileInfo_create(req->line.uri);
     if (fi.result) {
         response_file_error(fi.result, http_version_str, &ret);
         return ret;
     }
 
     // check if file can be opened
-    FILE* fptr = fopen(req->uri, "r");
+    FILE* fptr = fopen(req->line.uri, "r");
     if (fptr == NULL) {
         int en = errno;
         response_file_error(en, http_version_str, &ret);
