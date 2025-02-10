@@ -348,6 +348,7 @@ String get_response(HttpRequest* req)
         response_file_error(en, http_version_str, &ret);
         return ret;
     }
+    fclose(fptr);
 
     //
     // success
@@ -383,13 +384,6 @@ String get_response(HttpRequest* req)
 
     // completed headers
     String_push_cstr(&ret, "\r\n");
-
-    // TODO: do this in chunks
-    int c;
-    while ((c = fgetc(fptr)) != EOF) {
-        String_push_back(&ret, (char)c);
-    }
-    fclose(fptr);
     return ret;
 }
 

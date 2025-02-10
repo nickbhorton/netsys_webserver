@@ -14,6 +14,7 @@
 #include "debug_macros.h"
 
 #define BACKLOG 128
+#define CHUNK_SIZE 16384
 
 static int sfd = -1;
 static int cfd = -1;
@@ -85,6 +86,8 @@ int main(int argc, char** argv)
 
             char recv_buff[WS_BUFFER_SIZE];
             memset(recv_buff, 0, WS_BUFFER_SIZE);
+            char send_buff[CHUNK_SIZE];
+            // memset(send_buff, 0, CHUNK_SIZE);
 
             while (1) {
                 int num_events = poll(pfd, 1, WS_CHILD_TIMEOUT);
@@ -105,7 +108,13 @@ int main(int argc, char** argv)
                     HttpRequest req = HttpRequest_create(recv_buff);
 
                     String response = get_response(&req);
-                    rv = send(cfd, response.data, response.len, MSG_NOSIGNAL);
+                    // send header
+                    rv = send(
+                        cfd,
+                        response.data,
+                        response.len,
+                        MSG_NOSIGNAL | MSG_MORE
+                    );
                     if (rv < 0) {
                         int en = errno;
                         NP_DEBUG_ERR("send() %s\n", strerror(en));
@@ -121,7 +130,41 @@ int main(int argc, char** argv)
                         );
                     }
 
+                    bool send_file = response.data[9] == '2';
                     String_free(&response);
+
+                    if (send_file) {
+                        FileInfo finfo = FileInfo_create(req.line.uri);
+                        FILE* fptr = fopen(req.line.uri, "r");
+                        for (size_t i = 0; i < (finfo.length / CHUNK_SIZE) + 1;
+                             i++) {
+                            int c;
+                            size_t j = 0;
+                            for (; j < CHUNK_SIZE; j++) {
+                                c = fgetc(fptr);
+                                if (c == EOF) {
+                                    break;
+                                }
+                                send_buff[j] = (char)c;
+                            }
+                            rv = send(
+                                cfd,
+                                send_buff,
+                                j,
+                                MSG_NOSIGNAL | (i == (finfo.length / CHUNK_SIZE)
+                                                    ? 0
+                                                    : MSG_MORE)
+                            );
+                            printf("%i\n", rv);
+                            if (rv < 0) {
+                                int en = errno;
+                                NP_DEBUG_ERR("send() %s\n", strerror(en));
+                                goto clean_exit;
+                            }
+                        }
+                        fclose(fptr);
+                    }
+
                     // clear recv_buff
                     memset(recv_buff, 0, recv_count);
                     if (req.headers.connection == REQ_CONNECTION_CLOSE) {
