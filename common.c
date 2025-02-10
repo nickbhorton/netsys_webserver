@@ -276,14 +276,19 @@ response_file_error(int en, const char* http_version_str, String* response)
 String get_response(HttpRequest* req)
 {
     String ret = String_new();
-    const char* http_version_str = HTTP_1_1;
-    if (req->line.version == REQ_VERSION_1_0) {
+
+    const char* http_version_str;
+    switch (req->line.version) {
+    case REQ_VERSION_1_0:
         http_version_str = HTTP_1_0;
-    } else if (req->line.version == REQ_VERSION_1_1) {
+        break;
+    case REQ_VERSION_1_1:
         http_version_str = HTTP_1_1;
-    } else {
-        // Version not supported
-        String_push_cstr(&ret, http_version_str);
+        break;
+    case REQ_VERSION_2_0:
+    default:
+        // Version not supported error
+        String_push_cstr(&ret, HTTP_1_1);
         String_push_cstr(&ret, HTTP_505);
         return ret;
     }
@@ -305,6 +310,7 @@ String get_response(HttpRequest* req)
             return ret;
         }
     }
+
     // only support Get
     if (req->line.method != REQ_METHOD_GET) {
         String_push_cstr(&ret, http_version_str);
@@ -312,6 +318,7 @@ String get_response(HttpRequest* req)
         return ret;
     }
 
+    // getting the path for the file requested
     int rv = uri_to_path(req->line.uri);
     if (rv < 0) {
         String_push_cstr(&ret, http_version_str);
@@ -319,6 +326,7 @@ String get_response(HttpRequest* req)
         return ret;
     }
 
+    // getting the content type of file path
     const char* content_type = get_content_type(req->line.uri);
     if (strlen(content_type) == 0) {
         String_push_cstr(&ret, http_version_str);
@@ -326,7 +334,7 @@ String get_response(HttpRequest* req)
         return ret;
     }
 
-    // get file size
+    // get file info
     FileInfo fi = FileInfo_create(req->line.uri);
     if (fi.result) {
         response_file_error(fi.result, http_version_str, &ret);
@@ -341,25 +349,42 @@ String get_response(HttpRequest* req)
         return ret;
     }
 
+    //
+    // success
+    //
+
+    // line
     String_push_cstr(&ret, http_version_str);
     String_push_cstr(&ret, HTTP_200);
 
+    // server
+    String_push_cstr(&ret, "Server: nbh\r\n");
+
+    // content type
     String_push_cstr(&ret, "Content-Type: ");
     String_push_cstr(&ret, content_type);
     String_push_cstr(&ret, "\r\n");
 
+    // content length
     String_push_cstr(&ret, "Content-Length: ");
     char buffer[128];
     memset(buffer, 0, 128);
     snprintf(buffer, 128, "%zu", fi.length);
     String_push_cstr(&ret, buffer);
     String_push_cstr(&ret, "\r\n");
+
+    // keep alive or close
     if (req->headers.connection == REQ_CONNECTION_CLOSE) {
         String_push_cstr(&ret, "Connection: close\r\n");
     } else {
         String_push_cstr(&ret, "Connection: keep-alive\r\n");
+        String_push_cstr(&ret, "Keep-Alive: timeout=1, max=200\r\n");
     }
+
+    // completed headers
     String_push_cstr(&ret, "\r\n");
+
+    // TODO: do this in chunks
     int c;
     while ((c = fgetc(fptr)) != EOF) {
         String_push_back(&ret, (char)c);
