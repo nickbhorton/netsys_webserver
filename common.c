@@ -19,13 +19,13 @@ static const char* HTTP_1_0 = "HTTP/1.0 ";
 static const char* HTTP_200 = "200 Ok\r\n";
 
 // errors wont have files attached so double \r\n
-static const char* HTTP_400 = "400 Bad Request\r\n\r\n";
-static const char* HTTP_403 = "403 Forbidden\r\n\r\n";
-static const char* HTTP_404 = "404 Not Found\r\n\r\n";
-static const char* HTTP_405 = "405 Method Not Allowed\r\n\r\n";
-static const char* HTTP_414 = "414 URI Too Long\r\n\r\n";
-static const char* HTTP_500 = "500 Internal Sever Error\r\n\r\n";
-static const char* HTTP_505 = "505 HTTP Versoin Not Supported\r\n\r\n";
+static const char* HTTP_400 = "400 Bad Request\r\n";
+static const char* HTTP_403 = "403 Forbidden\r\n";
+static const char* HTTP_404 = "404 Not Found\r\n";
+static const char* HTTP_405 = "405 Method Not Allowed\r\n";
+static const char* HTTP_414 = "414 URI Too Long\r\n";
+static const char* HTTP_500 = "500 Internal Sever Error\r\n";
+static const char* HTTP_505 = "505 HTTP Versoin Not Supported\r\n";
 
 #define CONTENT_TYPE_COUNT 11
 static char content_type_trans[CONTENT_TYPE_COUNT][2][64] = {
@@ -354,8 +354,9 @@ HttpResponse get_response(HttpRequest* req)
         }
     }
 
-    // only support Get
-    if (req->line.method != REQ_METHOD_GET) {
+    // only support GET and HEAD
+    if (req->line.method != REQ_METHOD_GET &&
+        req->line.method != REQ_METHOD_HEAD) {
         set_response_code(&ret, 405);
         return ret;
     }

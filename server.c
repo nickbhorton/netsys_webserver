@@ -89,10 +89,9 @@ int main(int argc, char** argv)
 
             char send_buff[CHUNK_SIZE];
 
-            while (1) {
+            for (size_t r = 0; r < 200; r++) {
                 int num_events = poll(pfd, 1, WS_CHILD_TIMEOUT);
                 if (num_events == 0) {
-                    NP_DEBUG_MSG("%i: timeout\n", cpid);
                     goto clean_exit;
                 }
                 if (num_events > 0 && pfd[0].revents & POLLIN) {
@@ -105,8 +104,9 @@ int main(int argc, char** argv)
                         NP_DEBUG_ERR("%i: client closed connection\n", cpid);
                         goto clean_exit;
                     }
-                    HttpRequest req = HttpRequest_create(recv_buff);
-                    HttpResponse response = get_response(&req);
+
+                    HttpRequest request = HttpRequest_create(recv_buff);
+                    HttpResponse response = get_response(&request);
 
                     // send header
                     rv = send(
@@ -115,6 +115,7 @@ int main(int argc, char** argv)
                         response.header.len,
                         MSG_NOSIGNAL | MSG_MORE
                     );
+
                     if (rv < 0) {
                         int en = errno;
                         NP_DEBUG_ERR("send() %s\n", strerror(en));
@@ -125,15 +126,18 @@ int main(int argc, char** argv)
                         NP_DEBUG_MSG(
                             "%i: %s connection=%i\n",
                             cpid,
-                            req.line.uri,
-                            req.headers.connection
+                            request.line.uri,
+                            request.headers.connection
                         );
                     }
 
                     String_free(&response.header);
 
-                    if (response.finfo.result == 0) {
-                        FILE* fptr = fopen(req.line.uri, "r");
+                    if (response.finfo.result == 0 &&
+                        request.line.method == REQ_METHOD_GET) {
+                        FILE* fptr = fopen(request.line.uri, "r");
+                        if (fptr == NULL) {
+                        }
                         for (size_t i = 0;
                              i < (response.finfo.length / CHUNK_SIZE) + 1;
                              i++) {
@@ -166,7 +170,7 @@ int main(int argc, char** argv)
 
                     // clear recv_buff
                     memset(recv_buff, 0, recv_count);
-                    if (req.headers.connection == REQ_CONNECTION_CLOSE) {
+                    if (request.headers.connection == REQ_CONNECTION_CLOSE) {
                         goto clean_exit;
                     }
                 }
