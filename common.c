@@ -437,6 +437,10 @@ int bind_socket(const char* addr, const char* port, Address* address)
     int rv;
     rv = getaddrinfo(addr, port_ext, &hints, &address_info);
     if (rv != 0) {
+        if (rv == -8) {
+            fprintf(stderr, "port must be a number\n");
+            return -1;
+        }
         NP_DEBUG_ERR("getaddrinfo() error: %s\n", gai_strerror(rv));
         return -1;
     }

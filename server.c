@@ -15,31 +15,40 @@
 
 #define BACKLOG 128
 #define CHUNK_SIZE 16384
-
+static int child_count = 0;
 static int sfd = -1;
 static int cfd = -1;
-static pid_t cpid = -1;
+
+#define Fatal(rv, call)                                                        \
+    {                                                                          \
+        rv = call;                                                             \
+        if (rv < 0) {                                                          \
+            fflush(stdout);                                                    \
+            fflush(stderr);                                                    \
+            exit(EXIT_FAILURE);                                                \
+        }                                                                      \
+    }
+
+#define PrintErrno(str)                                                        \
+    int en = errno;                                                            \
+    fprintf(stderr, "%s() %s\n", str, strerror(en));
+
+#define FatalCheckErrno(rv, call, call_str)                                    \
+    {                                                                          \
+        rv = call;                                                             \
+        if (rv < 0) {                                                          \
+            PrintErrno(call_str);                                              \
+            fflush(stdout);                                                    \
+            fflush(stderr);                                                    \
+            exit(EXIT_FAILURE);                                                \
+        }                                                                      \
+    }
 
 void useage();
+void netprint(const char* buffer, size_t size);
 
-int setup_signal_handlers();
-void sigchld_handler(int signal);
-void sigint_handler(int signal);
-
-void netprint(const char* buffer, size_t size)
-{
-    for (size_t i = 0; i < size; i++) {
-        if (buffer[i] == '\r') {
-            printf("\033[41mCR\033[0m");
-        } else if (buffer[i] == '\n') {
-            printf("\033[41mLF\033[0m\n");
-        } else if (buffer[i] == '\0') {
-            break;
-        } else {
-            printf("%c", buffer[i]);
-        }
-    }
-}
+int parent_setup_signal_handlers();
+int child_setup_signal_handlers();
 
 int main(int argc, char** argv)
 {
@@ -48,21 +57,12 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    Address server_address;
-    sfd = bind_socket(NULL, argv[1], &server_address);
-    if (sfd < 0) {
-        return 1;
-    }
-    int rv = listen(sfd, BACKLOG);
-    if (rv < 0) {
-        int en = errno;
-        NP_DEBUG_ERR("listen() %s\n", strerror(en));
-    }
+    int rv;
+    Fatal(rv, parent_setup_signal_handlers());
 
-    rv = setup_signal_handlers();
-    if (rv < 0) {
-        return -rv;
-    }
+    Address server_address;
+    Fatal(sfd, bind_socket(NULL, argv[1], &server_address));
+    FatalCheckErrno(rv, listen(sfd, BACKLOG), "listen");
 
     Address client_address;
     while (1) {
@@ -76,7 +76,9 @@ int main(int argc, char** argv)
             NP_DEBUG_ERR("accept() %s\n", strerror(en));
             continue;
         }
+        int cpid;
         if (!(cpid = fork())) {
+            Fatal(rv, child_setup_signal_handlers());
             close(sfd); // close listener
             cpid = getpid();
 
@@ -133,10 +135,16 @@ int main(int argc, char** argv)
 
                     String_free(&response.header);
 
+                    // send the file in chunks
                     if (response.finfo.result == 0 &&
                         request.line.method == REQ_METHOD_GET) {
                         FILE* fptr = fopen(request.line.uri, "r");
                         if (fptr == NULL) {
+                            NP_DEBUG_ERR(
+                                "fopen() %s was null\n",
+                                request.line.uri
+                            );
+                            goto clean_exit;
                         }
                         for (size_t i = 0;
                              i < (response.finfo.length / CHUNK_SIZE) + 1;
@@ -180,13 +188,14 @@ int main(int argc, char** argv)
             shutdown(cfd, SHUT_RDWR);
             fflush(stdout);
             fflush(stderr);
-            exit(0);
+            exit(EXIT_SUCCESS);
         }
+
         // if parent shutdown(clie_fd, SHUT_WR) then childs pipe will break.
         // so child is responsable for shutting down the socket
+        child_count++;
         close(cfd);
         cfd = -1;
-        NP_DEBUG_MSG("\e[32m%i\e[0m spun child\n", cpid);
     }
 }
 
@@ -204,16 +213,14 @@ void sigchld_handler(int signal)
     // -1 Indicates wait for any child.
     // WNOHANG means 'return immediately if no child has exited' (from
     // linux.die.net)
-    pid_t child_term_pid;
     pid_t rv = 0;
     while ((rv = waitpid(-1, NULL, WNOHANG)) > 0) {
-        child_term_pid = rv;
+        child_count--;
     }
     errno = en;
-    NP_DEBUG_MSG("\e[31m%i\e[0m reaped child\n", child_term_pid);
 }
 
-void sigint_handler(int signal)
+void parent_sigint_handler(int signal)
 {
     int child_pid = 0;
     int status = 0;
@@ -223,18 +230,34 @@ void sigint_handler(int signal)
             child_pid,
             status
         );
+        child_count--;
     }
+    NP_DEBUG_MSG("children left at exit %i\n", child_count);
 
     int rv = shutdown(sfd, 2);
     if (rv < 0) {
         int en = errno;
         NP_DEBUG_ERR("shutdown() %s\n", strerror(en));
     }
-    NP_DEBUG_MSG("SIGINT recieved, exited cleanly\n");
+    fflush(stdout);
+    fflush(stderr);
     exit(0);
 }
 
-int setup_signal_handlers()
+void child_sigint_handler(int signal)
+{
+    int rv = shutdown(cfd, SHUT_RDWR);
+    if (rv < 0) {
+        int en = errno;
+        NP_DEBUG_ERR("shutdown() %s\n", strerror(en));
+    }
+    NP_DEBUG_MSG("child SIGINT recieved, exited cleanly\n");
+    fflush(stdout);
+    fflush(stderr);
+    exit(0);
+}
+
+int parent_setup_signal_handlers()
 {
     // This code comes from beej
     struct sigaction sa_sigchld;
@@ -245,18 +268,47 @@ int setup_signal_handlers()
     sa_sigchld.sa_flags = SA_RESTART;
     if (sigaction(SIGCHLD, &sa_sigchld, NULL) == -1) {
         int en = errno;
-        NP_DEBUG_ERR("sigaction() %s\n", strerror(en));
+        fprintf(stderr, "sigaction() %s\n", strerror(en));
         return -1;
     }
+
     struct sigaction sa_sigint;
-    sa_sigint.sa_handler = sigint_handler;
+    sa_sigint.sa_handler = parent_sigint_handler;
     sigemptyset(&sa_sigint.sa_mask);
     if (sigaction(SIGINT, &sa_sigint, NULL) == -1) {
         int en = errno;
-        NP_DEBUG_ERR("sigaction() %s\n", strerror(en));
+        fprintf(stderr, "sigaction() %s\n", strerror(en));
         return -1;
     }
     return 0;
+}
+
+int child_setup_signal_handlers()
+{
+    struct sigaction sa_sigint;
+    sa_sigint.sa_handler = child_sigint_handler;
+    sigemptyset(&sa_sigint.sa_mask);
+    if (sigaction(SIGINT, &sa_sigint, NULL) == -1) {
+        int en = errno;
+        fprintf(stderr, "sigaction() %s\n", strerror(en));
+        return -1;
+    }
+    return 0;
+}
+
+void netprint(const char* buffer, size_t size)
+{
+    for (size_t i = 0; i < size; i++) {
+        if (buffer[i] == '\r') {
+            printf("\033[41mCR\033[0m");
+        } else if (buffer[i] == '\n') {
+            printf("\033[41mLF\033[0m\n");
+        } else if (buffer[i] == '\0') {
+            break;
+        } else {
+            printf("%c", buffer[i]);
+        }
+    }
 }
 
 void useage() { printf("./server <port number>\n"); }
