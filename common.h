@@ -62,6 +62,22 @@ typedef struct {
     HttpHeaders headers;
 } HttpRequest;
 
+typedef struct {
+    int result;
+    size_t length;
+} FileInfo;
+
+typedef struct {
+    uint32_t code;
+    String header;
+    FileInfo finfo;
+} HttpResponse;
+
+typedef struct {
+    struct sockaddr_storage addr;
+    socklen_t addrlen;
+} Address;
+
 /* Creates a WsRequest from some char*.
  * If WsRequest cannot be created then method will be set to the
  * correct error.
@@ -87,21 +103,11 @@ const char* get_content_type(const char* path);
  */
 int uri_to_path(char uri[WS_URI_BUFFER_SIZE]);
 
-String get_response(HttpRequest* req);
+HttpResponse get_response(HttpRequest* req);
 
 int headers_connection_parse(const char* from, size_t max_len);
 
-typedef struct {
-    int result;
-    size_t length;
-} FileInfo;
-
 FileInfo FileInfo_create(const char* sanitized_uri);
-
-typedef struct {
-    struct sockaddr_storage addr;
-    socklen_t addrlen;
-} Address;
 
 struct sockaddr* Address_sockaddr(Address* a);
 

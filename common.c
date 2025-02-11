@@ -17,13 +17,15 @@ static const char* HTTP_1_1 = "HTTP/1.1 ";
 static const char* HTTP_1_0 = "HTTP/1.0 ";
 
 static const char* HTTP_200 = "200 Ok\r\n";
-static const char* HTTP_400 = "400 Bad Request\r\n";
-static const char* HTTP_403 = "403 Forbidden\r\n";
-static const char* HTTP_404 = "404 Not Found\r\n";
-static const char* HTTP_405 = "405 Method Not Allowed\r\n";
-static const char* HTTP_414 = "414 URI Too Long\r\n";
-static const char* HTTP_500 = "500 Internal Sever Error\r\n";
-static const char* HTTP_505 = "505 HTTP Versoin Not Supported\r\n";
+
+// errors wont have files attached so double \r\n
+static const char* HTTP_400 = "400 Bad Request\r\n\r\n";
+static const char* HTTP_403 = "403 Forbidden\r\n\r\n";
+static const char* HTTP_404 = "404 Not Found\r\n\r\n";
+static const char* HTTP_405 = "405 Method Not Allowed\r\n\r\n";
+static const char* HTTP_414 = "414 URI Too Long\r\n\r\n";
+static const char* HTTP_500 = "500 Internal Sever Error\r\n\r\n";
+static const char* HTTP_505 = "505 HTTP Versoin Not Supported\r\n\r\n";
 
 #define CONTENT_TYPE_COUNT 11
 static char content_type_trans[CONTENT_TYPE_COUNT][2][64] = {
@@ -258,24 +260,64 @@ int headers_connection_parse(const char* from, size_t max_len)
     return 0;
 }
 
-static void
-response_file_error(int en, const char* http_version_str, String* response)
+static void set_response_code(HttpResponse* response, uint32_t code)
 {
-    switch (en) {
-    case EACCES:
-        String_push_cstr(response, http_version_str);
-        String_push_cstr(response, HTTP_403);
+    switch (code) {
+    case 200:
+        String_push_cstr(&response->header, HTTP_200);
+        response->code = 200;
         break;
-    case ENOENT:
+    case 400:
+        String_push_cstr(&response->header, HTTP_400);
+        response->code = 400;
+        break;
+    case 403:
+        String_push_cstr(&response->header, HTTP_403);
+        response->code = 403;
+        break;
+    case 404:
+        String_push_cstr(&response->header, HTTP_404);
+        response->code = 404;
+        break;
+    case 405:
+        String_push_cstr(&response->header, HTTP_405);
+        response->code = 405;
+        break;
+    case 414:
+        String_push_cstr(&response->header, HTTP_414);
+        response->code = 414;
+        break;
+    case 500:
+        String_push_cstr(&response->header, HTTP_500);
+        response->code = 500;
+        break;
+    case 505:
+        String_push_cstr(&response->header, HTTP_505);
+        response->code = 505;
+        break;
     default:
-        String_push_cstr(response, http_version_str);
-        String_push_cstr(response, HTTP_404);
+        String_push_cstr(&response->header, HTTP_500);
+        response->code = 500;
+        break;
     }
 }
 
-String get_response(HttpRequest* req)
+static void response_file_error(HttpResponse* response, int en)
 {
-    String ret = String_new();
+    switch (en) {
+    case EACCES:
+        set_response_code(response, 403);
+        break;
+    case ENOENT:
+    default:
+        set_response_code(response, 404);
+    }
+}
+
+HttpResponse get_response(HttpRequest* req)
+{
+    HttpResponse ret;
+    ret.header = String_new();
 
     const char* http_version_str;
     switch (req->line.version) {
@@ -288,102 +330,90 @@ String get_response(HttpRequest* req)
     case REQ_VERSION_2_0:
     default:
         // Version not supported error
-        String_push_cstr(&ret, HTTP_1_1);
-        String_push_cstr(&ret, HTTP_505);
+        String_push_cstr(&ret.header, HTTP_1_1);
+        set_response_code(&ret, 505);
         return ret;
     }
+
+    // http version
+    String_push_cstr(&ret.header, http_version_str);
 
     // some error happend with request parsing
     if (req->line.method >= REQ_ERROR) {
         switch (req->line.method) {
         case REQ_ERROR_URI_SIZE:
-            String_push_cstr(&ret, http_version_str);
-            String_push_cstr(&ret, HTTP_414);
+            set_response_code(&ret, 414);
             return ret;
 
         case REQ_ERROR_URI_PARSE:
         case REQ_ERROR_METHOD_PARSE:
         case REQ_ERROR_VERSION_PARSE:
         default:
-            String_push_cstr(&ret, http_version_str);
-            String_push_cstr(&ret, HTTP_400);
+            set_response_code(&ret, 400);
             return ret;
         }
     }
 
     // only support Get
     if (req->line.method != REQ_METHOD_GET) {
-        String_push_cstr(&ret, http_version_str);
-        String_push_cstr(&ret, HTTP_405);
+        set_response_code(&ret, 405);
         return ret;
     }
 
     // getting the path for the file requested
     int rv = uri_to_path(req->line.uri);
     if (rv < 0) {
-        String_push_cstr(&ret, http_version_str);
-        String_push_cstr(&ret, HTTP_500);
+        set_response_code(&ret, 500);
         return ret;
     }
 
     // getting the content type of file path
     const char* content_type = get_content_type(req->line.uri);
     if (strlen(content_type) == 0) {
-        String_push_cstr(&ret, http_version_str);
-        String_push_cstr(&ret, HTTP_400);
+        set_response_code(&ret, 400);
         return ret;
     }
 
     // get file info
-    FileInfo fi = FileInfo_create(req->line.uri);
-    if (fi.result) {
-        response_file_error(fi.result, http_version_str, &ret);
+    ret.finfo = FileInfo_create(req->line.uri);
+    if (ret.finfo.result) {
+        response_file_error(&ret, ret.finfo.result);
         return ret;
     }
-
-    // check if file can be opened
-    FILE* fptr = fopen(req->line.uri, "r");
-    if (fptr == NULL) {
-        int en = errno;
-        response_file_error(en, http_version_str, &ret);
-        return ret;
-    }
-    fclose(fptr);
 
     //
     // success
     //
 
     // line
-    String_push_cstr(&ret, http_version_str);
-    String_push_cstr(&ret, HTTP_200);
+    set_response_code(&ret, 200);
 
     // server
-    String_push_cstr(&ret, "Server: nbh\r\n");
+    String_push_cstr(&ret.header, "Server: nbh\r\n");
 
     // content type
-    String_push_cstr(&ret, "Content-Type: ");
-    String_push_cstr(&ret, content_type);
-    String_push_cstr(&ret, "\r\n");
+    String_push_cstr(&ret.header, "Content-Type: ");
+    String_push_cstr(&ret.header, content_type);
+    String_push_cstr(&ret.header, "\r\n");
 
     // content length
-    String_push_cstr(&ret, "Content-Length: ");
+    String_push_cstr(&ret.header, "Content-Length: ");
     char buffer[128];
     memset(buffer, 0, 128);
-    snprintf(buffer, 128, "%zu", fi.length);
-    String_push_cstr(&ret, buffer);
-    String_push_cstr(&ret, "\r\n");
+    snprintf(buffer, 128, "%zu", ret.finfo.length);
+    String_push_cstr(&ret.header, buffer);
+    String_push_cstr(&ret.header, "\r\n");
 
     // keep alive or close
     if (req->headers.connection == REQ_CONNECTION_CLOSE) {
-        String_push_cstr(&ret, "Connection: close\r\n");
+        String_push_cstr(&ret.header, "Connection: close\r\n");
     } else {
-        String_push_cstr(&ret, "Connection: keep-alive\r\n");
-        String_push_cstr(&ret, "Keep-Alive: timeout=1, max=200\r\n");
+        String_push_cstr(&ret.header, "Connection: keep-alive\r\n");
+        String_push_cstr(&ret.header, "Keep-Alive: timeout=1, max=200\r\n");
     }
 
     // completed headers
-    String_push_cstr(&ret, "\r\n");
+    String_push_cstr(&ret.header, "\r\n");
     return ret;
 }
 
