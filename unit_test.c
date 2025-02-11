@@ -255,6 +255,11 @@ void happy_connection_parse_header(void)
         "GET / HTTP/1.1\r\n",
         "   Connection: keep-alive\r\n",
         "  Connection: close\r\n",
+        "Connection: Keep-alive\r\n",
+        "Connection: Close\r\n",
+        "Connection: Keep-Alive\r\n",
+        "connection: Close\r\n",
+        "connection: Keep-Alive\r\n",
         ""
     };
     int ans[] = {
@@ -263,7 +268,12 @@ void happy_connection_parse_header(void)
         0,
         REQ_CONNECTION_KEEP_ALIVE,
         REQ_CONNECTION_CLOSE,
-        0
+        REQ_CONNECTION_KEEP_ALIVE,
+        REQ_CONNECTION_CLOSE,
+        REQ_CONNECTION_KEEP_ALIVE,
+        REQ_CONNECTION_CLOSE,
+        REQ_CONNECTION_KEEP_ALIVE,
+        0,
     };
     for (size_t i = 0; i < sizeof(ans) / sizeof(int); i++) {
         int rv = headers_connection_parse(tests[i], strlen(tests[i]));

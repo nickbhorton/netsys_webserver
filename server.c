@@ -125,11 +125,21 @@ int main(int argc, char** argv)
                     }
 
                     if (response.code == 200) {
+                        const char* connect_str = "none";
+                        if (request.headers.connection ==
+                            REQ_CONNECTION_KEEP_ALIVE) {
+                            connect_str = "keep-alive";
+                        } else if (request.headers.connection ==
+                                   REQ_CONNECTION_CLOSE) {
+                            connect_str = "close";
+                        }
                         NP_DEBUG_MSG(
-                            "%i: %s connection=%i\n",
+                            "%i: %s%-48s%s Connection: %s\n",
                             cpid,
+                            "\e[33m",
                             request.line.uri,
-                            request.headers.connection
+                            "\e[0m",
+                            connect_str
                         );
                     }
 

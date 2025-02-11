@@ -3,6 +3,7 @@
 #include "debug_macros.h"
 
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <errno.h>
 #include <netdb.h>
 #include <stdbool.h>
@@ -252,9 +253,46 @@ int headers_connection_parse(const char* from, size_t max_len)
     if (header_len == 0) {
         return 0;
     }
-    if (strncmp(from + start, "Connection: keep-alive", header_len) == 0) {
+    static const char* connection_str = "connection";
+    size_t i;
+    for (i = 0; i < header_len; i++) {
+        if (from[start + i] == ':') {
+            i++;
+            break;
+        } else if (tolower(from[start + i]) != connection_str[i]) {
+            return 0;
+        }
+    }
+    if (i >= header_len) {
+        return 0;
+    }
+
+    // eat whitespace
+    for (; i < header_len; i++) {
+        if (!is_whitespace(from[start + i])) {
+            break;
+        }
+    }
+    if (i >= header_len) {
+        return 0;
+    }
+    static const char* keep_alive_str = "keep-alive";
+    static const char* close_str = "close";
+    size_t j;
+    for (j = 0; j < strlen(keep_alive_str); j++) {
+        if (tolower(from[start + i + j]) != keep_alive_str[j]) {
+            break;
+        }
+    }
+    if (j == strlen(keep_alive_str)) {
         return REQ_CONNECTION_KEEP_ALIVE;
-    } else if (strncmp(from + start, "Connection: close", header_len) == 0) {
+    }
+    for (j = 0; j < strlen(close_str); j++) {
+        if (tolower(from[start + i + j]) != close_str[j]) {
+            break;
+        }
+    }
+    if (j == strlen(close_str)) {
         return REQ_CONNECTION_CLOSE;
     }
     return 0;
