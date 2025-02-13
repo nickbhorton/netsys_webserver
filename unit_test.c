@@ -7,17 +7,7 @@
 
 void test_happy_parse(void)
 {
-    const char methods[9][8] = {
-        "GET",
-        "HEAD",
-        "OPTIONS",
-        "TRACE",
-        "PUT",
-        "DELETE",
-        "POST",
-        "PATCH",
-        "CONNECT"
-    };
+    const char methods[9][8] = {"GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE", "POST", "PATCH", "CONNECT"};
     const int method_nums[9] = {
         REQ_METHOD_GET,
         REQ_METHOD_HEAD,
@@ -51,28 +41,13 @@ void test_happy_parse(void)
         for (size_t j = 0; j < 3; j++) {
             for (size_t k = 0; k < FILE_COUNT; k++) {
                 memcpy(req_buffer, methods[i], strlen(methods[i]));
-                memcpy(
-                    req_buffer + strlen(methods[i]),
-                    uri_in[k],
-                    strlen(uri_in[k])
-                );
-                memcpy(
-                    req_buffer + strlen(methods[i]) + strlen(uri_in[k]),
-                    version[j],
-                    strlen(version[j])
-                );
-                memcpy(
-                    req_buffer + strlen(methods[i]) + strlen(uri_in[k]) +
-                        strlen(version[j]),
-                    "\r\n",
-                    2
-                );
+                memcpy(req_buffer + strlen(methods[i]), uri_in[k], strlen(uri_in[k]));
+                memcpy(req_buffer + strlen(methods[i]) + strlen(uri_in[k]), version[j], strlen(version[j]));
+                memcpy(req_buffer + strlen(methods[i]) + strlen(uri_in[k]) + strlen(version[j]), "\r\n", 2);
                 HttpRequestLine wreq = HttpRequestLine_create(req_buffer);
                 CU_ASSERT(wreq.method == method_nums[i]);
                 CU_ASSERT(wreq.version == version_nums[j]);
-                CU_ASSERT_FALSE(
-                    strncmp(wreq.uri, uri_out[k], strlen(uri_out[k]))
-                );
+                CU_ASSERT_FALSE(strncmp(wreq.uri, uri_out[k], strlen(uri_out[k])));
                 memset(req_buffer, 0, 2048);
             }
         }
@@ -81,17 +56,8 @@ void test_happy_parse(void)
 
 void test_extra_whitespace(void)
 {
-    const char methods[9][16] = {
-        "  GET ",
-        "  HEAD ",
-        "  OPTIONS ",
-        " TRACE ",
-        "   PUT ",
-        " DELETE ",
-        "POST  ",
-        " PATCH ",
-        "  CONNECT"
-    };
+    const char methods[9][16] =
+        {"  GET ", "  HEAD ", "  OPTIONS ", " TRACE ", "   PUT ", " DELETE ", "POST  ", " PATCH ", "  CONNECT"};
     const int method_nums[9] = {
         REQ_METHOD_GET,
         REQ_METHOD_HEAD,
@@ -125,29 +91,18 @@ void test_extra_whitespace(void)
         for (size_t j = 0; j < 3; j++) {
             for (size_t k = 0; k < FILE_COUNT; k++) {
                 memcpy(req_buffer, methods[i], strlen(methods[i]));
-                memcpy(
-                    req_buffer + strlen(methods[i]),
-                    uri_in[k],
-                    strlen(uri_in[k])
-                );
-                memcpy(
-                    req_buffer + strlen(methods[i]) + strlen(uri_in[k]),
-                    version[j],
-                    strlen(version[j])
-                );
+                memcpy(req_buffer + strlen(methods[i]), uri_in[k], strlen(uri_in[k]));
+                memcpy(req_buffer + strlen(methods[i]) + strlen(uri_in[k]), version[j], strlen(version[j]));
                 const char* sentinal = "      \r\n     ";
                 memcpy(
-                    req_buffer + strlen(methods[i]) + strlen(uri_in[k]) +
-                        strlen(version[j]),
+                    req_buffer + strlen(methods[i]) + strlen(uri_in[k]) + strlen(version[j]),
                     sentinal,
                     strlen(sentinal)
                 );
                 HttpRequestLine wreq = HttpRequestLine_create(req_buffer);
                 CU_ASSERT(wreq.method == method_nums[i]);
                 CU_ASSERT(wreq.version == version_nums[j]);
-                CU_ASSERT_FALSE(
-                    strncmp(wreq.uri, uri_out[k], strlen(uri_out[k]))
-                );
+                CU_ASSERT_FALSE(strncmp(wreq.uri, uri_out[k], strlen(uri_out[k])));
                 memset(req_buffer, 0, 2048);
             }
         }
@@ -234,8 +189,7 @@ void happy_sanitize_uri(void)
         {"/fancybox/fancy_nav_left.png", "www/fancybox/fancy_nav_left.png"},
         {"/fancybox/fancybox-y.png", "www/fancybox/fancybox-y.png"},
         {"/fancybox/fancy_shadow_sw.png", "www/fancybox/fancy_shadow_sw.png"},
-        {"/fancybox/jquery.easing-1.3.pack.js",
-         "www/fancybox/jquery.easing-1.3.pack.js"},
+        {"/fancybox/jquery.easing-1.3.pack.js", "www/fancybox/jquery.easing-1.3.pack.js"},
         {"/", "www/index.html"},
         {"/inside/", "www/index.html"},
         {"/test", "www/test"},
@@ -312,9 +266,7 @@ void happy_request_create()
         CU_ASSERT(ans[i].line.method == req.line.method);
         CU_ASSERT(ans[i].line.version == req.line.version);
         CU_ASSERT(ans[i].headers.connection == req.headers.connection);
-        CU_ASSERT(
-            0 == strncmp(ans[i].line.uri, req.line.uri, WS_URI_BUFFER_SIZE)
-        );
+        CU_ASSERT(0 == strncmp(ans[i].line.uri, req.line.uri, WS_URI_BUFFER_SIZE));
     }
 }
 
@@ -324,26 +276,14 @@ int main()
     CU_pSuite suite = CU_add_suite("WsRequestTestSuite", 0, 0);
     CU_add_test(suite, "happy case", test_happy_parse);
     CU_add_test(suite, "extra whitespace", test_extra_whitespace);
-    CU_add_test(
-        suite,
-        "method parsing error handling",
-        request_method_parse_error
-    );
-    CU_add_test(
-        suite,
-        "version parsing error handling",
-        request_version_parse_error
-    );
+    CU_add_test(suite, "method parsing error handling", request_method_parse_error);
+    CU_add_test(suite, "version parsing error handling", request_version_parse_error);
     CU_add_test(suite, "uri parsing error handling", request_uri_parse_error);
     CU_add_test(suite, "uri size error handling", request_uri_size_error);
     CU_pSuite suite2 = CU_add_suite("WsResponseTestSuite", 0, 0);
     CU_add_test(suite2, "get content type happy", happy_content_type);
     CU_add_test(suite2, "map specific uris happy", happy_sanitize_uri);
-    CU_add_test(
-        suite2,
-        "connection parse header happy",
-        happy_connection_parse_header
-    );
+    CU_add_test(suite2, "connection parse header happy", happy_connection_parse_header);
     CU_add_test(suite2, "http request create happy", happy_request_create);
     CU_basic_run_tests();
     CU_cleanup_registry();

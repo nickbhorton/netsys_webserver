@@ -19,29 +19,29 @@ static int child_count = 0;
 static int sfd = -1;
 static int cfd = -1;
 
-#define Fatal(rv, call)                                                        \
-    {                                                                          \
-        rv = call;                                                             \
-        if (rv < 0) {                                                          \
-            fflush(stdout);                                                    \
-            fflush(stderr);                                                    \
-            exit(EXIT_FAILURE);                                                \
-        }                                                                      \
+#define Fatal(rv, call)                                                                                                \
+    {                                                                                                                  \
+        rv = call;                                                                                                     \
+        if (rv < 0) {                                                                                                  \
+            fflush(stdout);                                                                                            \
+            fflush(stderr);                                                                                            \
+            exit(EXIT_FAILURE);                                                                                        \
+        }                                                                                                              \
     }
 
-#define PrintErrno(str)                                                        \
-    int en = errno;                                                            \
+#define PrintErrno(str)                                                                                                \
+    int en = errno;                                                                                                    \
     fprintf(stderr, "%s() %s\n", str, strerror(en));
 
-#define FatalCheckErrno(rv, call, call_str)                                    \
-    {                                                                          \
-        rv = call;                                                             \
-        if (rv < 0) {                                                          \
-            PrintErrno(call_str);                                              \
-            fflush(stdout);                                                    \
-            fflush(stderr);                                                    \
-            exit(EXIT_FAILURE);                                                \
-        }                                                                      \
+#define FatalCheckErrno(rv, call, call_str)                                                                            \
+    {                                                                                                                  \
+        rv = call;                                                                                                     \
+        if (rv < 0) {                                                                                                  \
+            PrintErrno(call_str);                                                                                      \
+            fflush(stdout);                                                                                            \
+            fflush(stderr);                                                                                            \
+            exit(EXIT_FAILURE);                                                                                        \
+        }                                                                                                              \
     }
 
 void useage();
@@ -66,11 +66,7 @@ int main(int argc, char** argv)
 
     Address client_address;
     while (1) {
-        cfd = accept(
-            sfd,
-            Address_sockaddr(&client_address),
-            &client_address.addrlen
-        );
+        cfd = accept(sfd, Address_sockaddr(&client_address), &client_address.addrlen);
         if (cfd < 0) {
             int en = errno;
             NP_DEBUG_ERR("accept() %s\n", strerror(en));
@@ -98,12 +94,7 @@ int main(int argc, char** argv)
                     goto clean_exit;
                 }
                 if (num_events > 0 && pfd[0].revents & POLLIN) {
-                    int recv_count = recv(
-                        cfd,
-                        recv_buff + recv_buffer_index,
-                        WS_BUFFER_SIZE - recv_buffer_index,
-                        0
-                    );
+                    int recv_count = recv(cfd, recv_buff + recv_buffer_index, WS_BUFFER_SIZE - recv_buffer_index, 0);
                     if (recv_count < 0) {
                         int en = errno;
                         NP_DEBUG_ERR("recv() %s\n", strerror(en));
@@ -111,8 +102,7 @@ int main(int argc, char** argv)
                     } else if (recv_count == 0) {
                         NP_DEBUG_ERR("%i: client closed connection\n", cpid);
                         goto clean_exit;
-                    } else if (http_nlen(recv_buff, WS_BUFFER_SIZE) ==
-                               WS_BUFFER_SIZE) {
+                    } else if (http_nlen(recv_buff, WS_BUFFER_SIZE) == WS_BUFFER_SIZE) {
                         recv_buffer_index += recv_count;
                         continue;
                     }
@@ -140,19 +130,13 @@ int main(int argc, char** argv)
                     String_free(&response.header);
 
                     // send the file in chunks
-                    if (response.finfo.result == 0 &&
-                        request.line.method == REQ_METHOD_GET) {
+                    if (response.finfo.result == 0 && request.line.method == REQ_METHOD_GET) {
                         FILE* fptr = fopen(request.line.uri, "r");
                         if (fptr == NULL) {
-                            NP_DEBUG_ERR(
-                                "fopen() %s was null\n",
-                                request.line.uri
-                            );
+                            NP_DEBUG_ERR("fopen() %s was null\n", request.line.uri);
                             goto clean_exit;
                         }
-                        for (size_t i = 0;
-                             i < (response.finfo.length / CHUNK_SIZE) + 1;
-                             i++) {
+                        for (size_t i = 0; i < (response.finfo.length / CHUNK_SIZE) + 1; i++) {
                             int c;
                             size_t j = 0;
                             for (; j < CHUNK_SIZE; j++) {
@@ -164,12 +148,7 @@ int main(int argc, char** argv)
                             }
                             send_amount = 0;
                             while (send_amount < j) {
-                                rv = send(
-                                    cfd,
-                                    send_buff + send_amount,
-                                    j - send_amount,
-                                    MSG_NOSIGNAL
-                                );
+                                rv = send(cfd, send_buff + send_amount, j - send_amount, MSG_NOSIGNAL);
                                 if (rv < 0) {
                                     int en = errno;
                                     NP_DEBUG_ERR("send() %s\n", strerror(en));
@@ -183,11 +162,9 @@ int main(int argc, char** argv)
 
                     if (response.code == 200) {
                         const char* connect_str = "none";
-                        if (request.headers.connection ==
-                            REQ_CONNECTION_KEEP_ALIVE) {
+                        if (request.headers.connection == REQ_CONNECTION_KEEP_ALIVE) {
                             connect_str = "keep-alive";
-                        } else if (request.headers.connection ==
-                                   REQ_CONNECTION_CLOSE) {
+                        } else if (request.headers.connection == REQ_CONNECTION_CLOSE) {
                             connect_str = "close";
                         }
                         NP_DEBUG_MSG(
@@ -203,8 +180,7 @@ int main(int argc, char** argv)
                     // clear recv_buff
                     memset(recv_buff, 0, recv_count);
                     recv_buffer_index = 0;
-                    if (request.headers.connection !=
-                        REQ_CONNECTION_KEEP_ALIVE) {
+                    if (request.headers.connection != REQ_CONNECTION_KEEP_ALIVE) {
                         goto clean_exit;
                     }
                 }
@@ -251,11 +227,7 @@ void parent_sigint_handler(int signal)
     int child_pid = 0;
     int status = 0;
     while ((child_pid = wait(&status)) > 0) {
-        NP_DEBUG_MSG(
-            "\e[31m%i\e[0m reaped child at parent exit, status %i\n",
-            child_pid,
-            status
-        );
+        NP_DEBUG_MSG("\e[31m%i\e[0m reaped child at parent exit, status %i\n", child_pid, status);
         child_count--;
     }
     NP_DEBUG_MSG("children left at exit %i\n", child_count);

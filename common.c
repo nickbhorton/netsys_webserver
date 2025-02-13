@@ -50,17 +50,8 @@ static char content_type_trans[CONTENT_TYPE_COUNT][2][64] = {
 };
 
 #define HTTP_METHOD_COUNT 9
-const char http_methods[HTTP_METHOD_COUNT][8] = {
-    "GET",
-    "HEAD",
-    "OPTIONS",
-    "TRACE",
-    "PUT",
-    "DELETE",
-    "POST",
-    "PATCH",
-    "CONNECT"
-};
+const char http_methods[HTTP_METHOD_COUNT][8] =
+    {"GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE", "POST", "PATCH", "CONNECT"};
 const int http_methods_index[HTTP_METHOD_COUNT] = {
     REQ_METHOD_GET,
     REQ_METHOD_HEAD,
@@ -114,8 +105,7 @@ HttpRequestLine HttpRequestLine_create(const char from[WS_BUFFER_SIZE])
     for (; i < request_line_len; i++) {
         for (size_t j = 0; j < HTTP_METHOD_COUNT; j++) {
             unsigned int method_len = strlen(http_methods[j]);
-            if (strncmp(from + i, http_methods[j], method_len) == 0 &&
-                is_whitespace(from[i + method_len])) {
+            if (strncmp(from + i, http_methods[j], method_len) == 0 && is_whitespace(from[i + method_len])) {
                 rv.method = http_methods_index[j];
                 i += method_len + 1;
                 goto http_method_done;
@@ -149,8 +139,7 @@ http_method_done:
     for (; i < request_line_len; i++) {
         for (size_t j = 0; j < HTTP_VERSION_COUNT; j++) {
             unsigned int version_len = strlen(http_versions[j]);
-            if (strncmp(from + i, http_versions[j], version_len) == 0 &&
-                is_whitespace(from[i + version_len])) {
+            if (strncmp(from + i, http_versions[j], version_len) == 0 && is_whitespace(from[i + version_len])) {
                 rv.version = http_methods_index[j];
                 i += version_len + 1;
                 goto http_version_done;
@@ -205,11 +194,7 @@ const char* get_content_type(const char* path)
     }
 
     for (size_t i = 0; i < CONTENT_TYPE_COUNT; i++) {
-        if (strncmp(
-                path + dot_index + 1,
-                content_type_trans[i][0],
-                WS_PATH_BUFFER_SIZE - (dot_index + 1)
-            ) == 0) {
+        if (strncmp(path + dot_index + 1, content_type_trans[i][0], WS_PATH_BUFFER_SIZE - (dot_index + 1)) == 0) {
             return content_type_trans[i][1];
         }
     }
@@ -219,8 +204,7 @@ const char* get_content_type(const char* path)
 int uri_to_path(char uri[WS_URI_BUFFER_SIZE])
 {
     unsigned int root_len = strlen(ROOT_DIR);
-    if (strncmp("/", uri, WS_URI_BUFFER_SIZE) == 0 ||
-        strncmp("/inside/", uri, WS_URI_BUFFER_SIZE) == 0) {
+    if (strncmp("/", uri, WS_URI_BUFFER_SIZE) == 0 || strncmp("/inside/", uri, WS_URI_BUFFER_SIZE) == 0) {
         const char* default_path = "/index.html";
         memcpy(uri, ROOT_DIR, root_len);
         memcpy(uri + root_len, default_path, strlen(default_path));
@@ -400,8 +384,7 @@ HttpResponse get_response(HttpRequest* req)
     }
 
     // only support GET and HEAD
-    if (req->line.method != REQ_METHOD_GET &&
-        req->line.method != REQ_METHOD_HEAD) {
+    if (req->line.method != REQ_METHOD_GET && req->line.method != REQ_METHOD_HEAD) {
         set_response_code(&ret, 405);
         return ret;
     }
@@ -451,8 +434,7 @@ HttpResponse get_response(HttpRequest* req)
     String_push_cstr(&ret.header, "\r\n");
 
     // keep alive or close
-    if (req->headers.connection == REQ_CONNECTION_CLOSE ||
-        req->headers.connection == 0) {
+    if (req->headers.connection == REQ_CONNECTION_CLOSE || req->headers.connection == 0) {
         String_push_cstr(&ret.header, "Connection: close\r\n");
     } else {
         String_push_cstr(&ret.header, "Connection: keep-alive\r\n");
@@ -496,8 +478,7 @@ int bind_socket(const char* addr, const char* port, Address* address)
     // linked list traversal vibe from beej.us
     struct addrinfo* ptr;
     for (ptr = address_info; ptr != NULL; ptr = ptr->ai_next) {
-        if ((fd = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol)) <
-            0) {
+        if ((fd = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol)) < 0) {
             int en = errno;
             NP_DEBUG_ERR("socket() error: %s\n", strerror(en));
             continue; // next loop
@@ -532,7 +513,4 @@ int bind_socket(const char* addr, const char* port, Address* address)
     return fd;
 }
 
-struct sockaddr* Address_sockaddr(Address* a)
-{
-    return (struct sockaddr*)&a->addr;
-}
+struct sockaddr* Address_sockaddr(Address* a) { return (struct sockaddr*)&a->addr; }
