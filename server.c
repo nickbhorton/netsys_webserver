@@ -100,9 +100,10 @@ int main(int argc, char** argv)
                         NP_DEBUG_ERR("recv() %s\n", strerror(en));
                         goto clean_exit;
                     } else if (recv_count == 0) {
-                        // NP_DEBUG_ERR("%i: client closed connection\n", cpid);
+                        // client has closed the connection
                         goto clean_exit;
                     } else if (http_nlen(recv_buff, WS_BUFFER_SIZE) == WS_BUFFER_SIZE) {
+                        // need more data from recv
                         recv_buffer_index += recv_count;
                         continue;
                     }
@@ -176,12 +177,13 @@ int main(int argc, char** argv)
                         connect_str
                     );
 
-                    // clear recv_buff
-                    memset(recv_buff, 0, recv_count);
-                    recv_buffer_index = 0;
                     if (request.headers.connection != REQ_CONNECTION_KEEP_ALIVE) {
                         goto clean_exit;
                     }
+
+                    // clear recv_buff
+                    memset(recv_buff, 0, recv_count);
+                    recv_buffer_index = 0;
                 }
             }
 

@@ -4,3 +4,4 @@ server
 .clang-format
 
 www
+aria2c.log
