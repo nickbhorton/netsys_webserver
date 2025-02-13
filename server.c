@@ -100,7 +100,7 @@ int main(int argc, char** argv)
                         NP_DEBUG_ERR("recv() %s\n", strerror(en));
                         goto clean_exit;
                     } else if (recv_count == 0) {
-                        NP_DEBUG_ERR("%i: client closed connection\n", cpid);
+                        // NP_DEBUG_ERR("%i: client closed connection\n", cpid);
                         goto clean_exit;
                     } else if (http_nlen(recv_buff, WS_BUFFER_SIZE) == WS_BUFFER_SIZE) {
                         recv_buffer_index += recv_count;
@@ -130,10 +130,10 @@ int main(int argc, char** argv)
                     String_free(&response.header);
 
                     // send the file in chunks
-                    if (response.finfo.result == 0 && request.line.method == REQ_METHOD_GET) {
+                    if (response.code == 200 && request.line.method == REQ_METHOD_GET) {
                         FILE* fptr = fopen(request.line.uri, "r");
                         if (fptr == NULL) {
-                            NP_DEBUG_ERR("fopen() %s was null\n", request.line.uri);
+                            // NP_DEBUG_ERR("fopen() %s was null\n", request.line.uri);
                             goto clean_exit;
                         }
                         for (size_t i = 0; i < (response.finfo.length / CHUNK_SIZE) + 1; i++) {
@@ -160,22 +160,21 @@ int main(int argc, char** argv)
                         fclose(fptr);
                     }
 
-                    if (response.code == 200) {
-                        const char* connect_str = "none";
-                        if (request.headers.connection == REQ_CONNECTION_KEEP_ALIVE) {
-                            connect_str = "keep-alive";
-                        } else if (request.headers.connection == REQ_CONNECTION_CLOSE) {
-                            connect_str = "close";
-                        }
-                        NP_DEBUG_MSG(
-                            "%i: %s%-48s%s Connection: %s\n",
-                            cpid,
-                            "\e[33m",
-                            request.line.uri,
-                            "\e[0m",
-                            connect_str
-                        );
+                    const char* connect_str = "none";
+                    if (request.headers.connection == REQ_CONNECTION_KEEP_ALIVE) {
+                        connect_str = "keep-alive";
+                    } else if (request.headers.connection == REQ_CONNECTION_CLOSE) {
+                        connect_str = "close";
                     }
+                    NP_DEBUG_MSG(
+                        "%i: %s%i%s %-48s Connection: %s\n",
+                        cpid,
+                        response.code == 200 ? "\e[32m" : "\e[31m",
+                        response.code,
+                        "\e[0m",
+                        request.line.uri,
+                        connect_str
+                    );
 
                     // clear recv_buff
                     memset(recv_buff, 0, recv_count);

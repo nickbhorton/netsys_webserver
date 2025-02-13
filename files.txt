@@ -77,3 +77,4 @@ http://127.0.0.1:8888/graphics/statistics.gif
 http://127.0.0.1:8888/graphics/index.gif
 http://127.0.0.1:8888/files/welcome.html
 http://127.0.0.1:8888/files/text1.txt
+http://127.0.0.1:8888/doesnotexist

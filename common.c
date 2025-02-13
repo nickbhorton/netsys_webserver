@@ -20,13 +20,13 @@ static const char* HTTP_1_0 = "HTTP/1.0 ";
 static const char* HTTP_200 = "200 Ok\r\n";
 
 // errors wont have files attached so double \r\n
-static const char* HTTP_400 = "400 Bad Request\r\n\r\n";
-static const char* HTTP_403 = "403 Forbidden\r\n\r\n";
-static const char* HTTP_404 = "404 Not Found\r\n\r\n";
-static const char* HTTP_405 = "405 Method Not Allowed\r\n\r\n";
-static const char* HTTP_414 = "414 URI Too Long\r\n\r\n";
-static const char* HTTP_500 = "500 Internal Sever Error\r\n\r\n";
-static const char* HTTP_505 = "505 HTTP Versoin Not Supported\r\n\r\n";
+static const char* HTTP_400 = "400 Bad Request\r\n";
+static const char* HTTP_403 = "403 Forbidden\r\n";
+static const char* HTTP_404 = "404 Not Found\r\n";
+static const char* HTTP_405 = "405 Method Not Allowed\r\n";
+static const char* HTTP_414 = "414 URI Too Long\r\n";
+static const char* HTTP_500 = "500 Internal Sever Error\r\n";
+static const char* HTTP_505 = "505 HTTP Versoin Not Supported\r\n";
 
 #define CONTENT_TYPE_COUNT 16
 static char content_type_trans[CONTENT_TYPE_COUNT][2][64] = {
@@ -289,7 +289,7 @@ int headers_connection_parse(const char* from, size_t max_len)
     return 0;
 }
 
-static void set_response_code(HttpResponse* response, uint32_t code)
+static void add_response_code(HttpResponse* response, uint32_t code)
 {
     switch (code) {
     case 200:
@@ -331,15 +331,28 @@ static void set_response_code(HttpResponse* response, uint32_t code)
     }
 }
 
+/*
 static void response_file_error(HttpResponse* response, int en)
 {
     switch (en) {
     case EACCES:
-        set_response_code(response, 403);
+        add_response_code(response, 403);
         break;
     case ENOENT:
     default:
-        set_response_code(response, 404);
+        add_response_code(response, 404);
+    }
+}
+*/
+
+static void add_connection_header(String* str, int connection_header)
+{
+    // keep alive or close
+    if (connection_header == REQ_CONNECTION_CLOSE || connection_header == 0) {
+        String_push_cstr(str, "Connection: close\r\n");
+    } else {
+        String_push_cstr(str, "Connection: keep-alive\r\n");
+        String_push_cstr(str, "Keep-Alive: timeout=1, max=200\r\n");
     }
 }
 
@@ -360,53 +373,80 @@ HttpResponse get_response(HttpRequest* req)
     default:
         // Version not supported error
         String_push_cstr(&ret.header, HTTP_1_1);
-        set_response_code(&ret, 505);
+        add_response_code(&ret, 505);
+        add_connection_header(&ret.header, req->headers.connection);
+        String_push_cstr(&ret.header, "\r\n");
         return ret;
     }
-
-    // http version
-    String_push_cstr(&ret.header, http_version_str);
 
     // some error happend with request parsing
     if (req->line.method >= REQ_ERROR) {
         switch (req->line.method) {
         case REQ_ERROR_URI_SIZE:
-            set_response_code(&ret, 414);
+            String_push_cstr(&ret.header, http_version_str);
+            add_response_code(&ret, 414);
+            add_connection_header(&ret.header, req->headers.connection);
+            String_push_cstr(&ret.header, "\r\n");
             return ret;
 
         case REQ_ERROR_URI_PARSE:
         case REQ_ERROR_METHOD_PARSE:
         case REQ_ERROR_VERSION_PARSE:
         default:
-            set_response_code(&ret, 400);
+            String_push_cstr(&ret.header, http_version_str);
+            add_response_code(&ret, 400);
+            add_connection_header(&ret.header, req->headers.connection);
+            String_push_cstr(&ret.header, "\r\n");
             return ret;
         }
     }
 
     // only support GET and HEAD
     if (req->line.method != REQ_METHOD_GET && req->line.method != REQ_METHOD_HEAD) {
-        set_response_code(&ret, 405);
+        String_push_cstr(&ret.header, http_version_str);
+        add_response_code(&ret, 405);
+        add_connection_header(&ret.header, req->headers.connection);
+        String_push_cstr(&ret.header, "\r\n");
         return ret;
     }
 
     // getting the path for the file requested
     int rv = uri_to_path(req->line.uri);
     if (rv < 0) {
-        set_response_code(&ret, 500);
-        return ret;
-    }
-
-    // getting the content type of file path
-    const char* content_type = get_content_type(req->line.uri);
-    if (strlen(content_type) == 0) {
-        set_response_code(&ret, 400);
+        String_push_cstr(&ret.header, http_version_str);
+        add_response_code(&ret, 500);
+        add_connection_header(&ret.header, req->headers.connection);
+        String_push_cstr(&ret.header, "\r\n");
         return ret;
     }
 
     // get file info
     ret.finfo = FileInfo_create(req->line.uri);
     if (ret.finfo.result) {
-        response_file_error(&ret, ret.finfo.result);
+        switch (ret.finfo.result) {
+        case EACCES:
+            String_push_cstr(&ret.header, http_version_str);
+            add_response_code(&ret, 403);
+            add_connection_header(&ret.header, req->headers.connection);
+            String_push_cstr(&ret.header, "\r\n");
+            break;
+        case ENOENT:
+        default:
+            String_push_cstr(&ret.header, http_version_str);
+            add_response_code(&ret, 404);
+            add_connection_header(&ret.header, req->headers.connection);
+            String_push_cstr(&ret.header, "\r\n");
+        }
+        return ret;
+    }
+
+    // getting the content type of file path
+    const char* content_type = get_content_type(req->line.uri);
+    if (strlen(content_type) == 0) {
+        String_push_cstr(&ret.header, http_version_str);
+        add_response_code(&ret, 400);
+        add_connection_header(&ret.header, req->headers.connection);
+        String_push_cstr(&ret.header, "\r\n");
         return ret;
     }
 
@@ -414,11 +454,9 @@ HttpResponse get_response(HttpRequest* req)
     // success
     //
 
-    // line
-    set_response_code(&ret, 200);
-
-    // server
-    String_push_cstr(&ret.header, "Server: nbh\r\n");
+    String_push_cstr(&ret.header, http_version_str);
+    add_response_code(&ret, 200);
+    add_connection_header(&ret.header, req->headers.connection);
 
     // content type
     String_push_cstr(&ret.header, "Content-Type: ");
@@ -433,15 +471,8 @@ HttpResponse get_response(HttpRequest* req)
     String_push_cstr(&ret.header, buffer);
     String_push_cstr(&ret.header, "\r\n");
 
-    // keep alive or close
-    if (req->headers.connection == REQ_CONNECTION_CLOSE || req->headers.connection == 0) {
-        String_push_cstr(&ret.header, "Connection: close\r\n");
-    } else {
-        String_push_cstr(&ret.header, "Connection: keep-alive\r\n");
-        String_push_cstr(&ret.header, "Keep-Alive: timeout=1, max=200\r\n");
-    }
-
-    // completed headers
+    // server
+    String_push_cstr(&ret.header, "Server: nbh\r\n");
     String_push_cstr(&ret.header, "\r\n");
     return ret;
 }

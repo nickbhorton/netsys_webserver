@@ -24,3 +24,4 @@ clean:
 	rm -f *.o
 	rm -f test
 	rm -f server
+	rm -f aria2c.log
