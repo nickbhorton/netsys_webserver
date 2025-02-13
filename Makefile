@@ -1,5 +1,7 @@
 CC=gcc
-CFLAGS=-g3 -Wall -Werror -fsanitize=address
+CFLAGS_DEBUG=-g -Wall -Werror -fsanitize=address
+CFLAGS_RELEASE=-O3 -Wall -Werror
+CFLAGS=$(CFLAGS_DEBUG)
 
 all: test server
 

@@ -20,27 +20,33 @@ static const char* HTTP_1_0 = "HTTP/1.0 ";
 static const char* HTTP_200 = "200 Ok\r\n";
 
 // errors wont have files attached so double \r\n
-static const char* HTTP_400 = "400 Bad Request\r\n";
-static const char* HTTP_403 = "403 Forbidden\r\n";
-static const char* HTTP_404 = "404 Not Found\r\n";
-static const char* HTTP_405 = "405 Method Not Allowed\r\n";
-static const char* HTTP_414 = "414 URI Too Long\r\n";
-static const char* HTTP_500 = "500 Internal Sever Error\r\n";
-static const char* HTTP_505 = "505 HTTP Versoin Not Supported\r\n";
+static const char* HTTP_400 = "400 Bad Request\r\n\r\n";
+static const char* HTTP_403 = "403 Forbidden\r\n\r\n";
+static const char* HTTP_404 = "404 Not Found\r\n\r\n";
+static const char* HTTP_405 = "405 Method Not Allowed\r\n\r\n";
+static const char* HTTP_414 = "414 URI Too Long\r\n\r\n";
+static const char* HTTP_500 = "500 Internal Sever Error\r\n\r\n";
+static const char* HTTP_505 = "505 HTTP Versoin Not Supported\r\n\r\n";
 
-#define CONTENT_TYPE_COUNT 11
+#define CONTENT_TYPE_COUNT 16
 static char content_type_trans[CONTENT_TYPE_COUNT][2][64] = {
     {"html", "text/html"},
     {"css", "text/css"},
     {"js", "application/javascript"},
-    {"htm", "text/html"},
     {"jpg", "image/jpg"},
     {"png", "image/png"},
-    {"webp", "image/webp"},
     {"gif", "image/gif"},
     {"txt", "text/plain"},
-    {"jpeg", "image/jpg"},
+    {"htm", "text/html"},
     {"ico", "image/x-icon"},
+    // not required
+    {"pdf", "application/pdf"},
+    {"json", "application/json"},
+    {"bin", "application/octect-stream"},
+    {"bmp", "image/bmp"},
+    {"csv", "image/csv"},
+    {"webp", "image/webp"},
+    {"jpeg", "image/jpg"},
 };
 
 #define HTTP_METHOD_COUNT 9
@@ -81,15 +87,16 @@ const int http_versions_index[HTTP_VERSION_COUNT] = {
 
 static bool is_whitespace(char c) { return c == ' ' || c == '\r' || c == '\t'; }
 
-static size_t http_nlen(const char* src, size_t dflt)
+size_t http_nlen(const char* src, size_t max)
 {
-    size_t rv = dflt;
-    for (size_t i = 1; i < dflt; i++) {
+    for (size_t i = 1; i < max; i++) {
         if (src[i - 1] == '\r' && src[i] == '\n') {
             return i - 1;
+        } else if (src[i] == '\0') {
+            return max;
         }
     }
-    return rv;
+    return max;
 }
 
 HttpRequestLine HttpRequestLine_create(const char from[WS_BUFFER_SIZE])
@@ -444,7 +451,8 @@ HttpResponse get_response(HttpRequest* req)
     String_push_cstr(&ret.header, "\r\n");
 
     // keep alive or close
-    if (req->headers.connection == REQ_CONNECTION_CLOSE) {
+    if (req->headers.connection == REQ_CONNECTION_CLOSE ||
+        req->headers.connection == 0) {
         String_push_cstr(&ret.header, "Connection: close\r\n");
     } else {
         String_push_cstr(&ret.header, "Connection: keep-alive\r\n");

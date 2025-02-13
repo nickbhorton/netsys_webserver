@@ -1,6 +1,5 @@
 #include "common.h"
 
-#include <bits/types/idtype_t.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -9,6 +8,7 @@
 #include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "debug_macros.h"
@@ -87,6 +87,7 @@ int main(int argc, char** argv)
             pfd[0].events = POLLIN;
 
             char recv_buff[WS_BUFFER_SIZE];
+            size_t recv_buffer_index = 0;
             memset(recv_buff, 0, WS_BUFFER_SIZE);
 
             char send_buff[CHUNK_SIZE];
@@ -97,7 +98,12 @@ int main(int argc, char** argv)
                     goto clean_exit;
                 }
                 if (num_events > 0 && pfd[0].revents & POLLIN) {
-                    int recv_count = recv(cfd, recv_buff, WS_BUFFER_SIZE, 0);
+                    int recv_count = recv(
+                        cfd,
+                        recv_buff + recv_buffer_index,
+                        WS_BUFFER_SIZE - recv_buffer_index,
+                        0
+                    );
                     if (recv_count < 0) {
                         int en = errno;
                         NP_DEBUG_ERR("recv() %s\n", strerror(en));
@@ -105,42 +111,30 @@ int main(int argc, char** argv)
                     } else if (recv_count == 0) {
                         NP_DEBUG_ERR("%i: client closed connection\n", cpid);
                         goto clean_exit;
+                    } else if (http_nlen(recv_buff, WS_BUFFER_SIZE) ==
+                               WS_BUFFER_SIZE) {
+                        recv_buffer_index += recv_count;
+                        continue;
                     }
 
                     HttpRequest request = HttpRequest_create(recv_buff);
                     HttpResponse response = get_response(&request);
 
                     // send header
-                    rv = send(
-                        cfd,
-                        response.header.data,
-                        response.header.len,
-                        MSG_NOSIGNAL | MSG_MORE
-                    );
-
-                    if (rv < 0) {
-                        int en = errno;
-                        NP_DEBUG_ERR("send() %s\n", strerror(en));
-                        goto clean_exit;
-                    }
-
-                    if (response.code == 200) {
-                        const char* connect_str = "none";
-                        if (request.headers.connection ==
-                            REQ_CONNECTION_KEEP_ALIVE) {
-                            connect_str = "keep-alive";
-                        } else if (request.headers.connection ==
-                                   REQ_CONNECTION_CLOSE) {
-                            connect_str = "close";
-                        }
-                        NP_DEBUG_MSG(
-                            "%i: %s%-48s%s Connection: %s\n",
-                            cpid,
-                            "\e[33m",
-                            request.line.uri,
-                            "\e[0m",
-                            connect_str
+                    size_t send_amount = 0;
+                    while (send_amount < response.header.len) {
+                        rv = send(
+                            cfd,
+                            response.header.data + send_amount,
+                            response.header.len - send_amount,
+                            MSG_NOSIGNAL
                         );
+                        if (rv < 0) {
+                            int en = errno;
+                            NP_DEBUG_ERR("send() %s\n", strerror(en));
+                            goto clean_exit;
+                        }
+                        send_amount += rv;
                     }
 
                     String_free(&response.header);
@@ -168,27 +162,49 @@ int main(int argc, char** argv)
                                 }
                                 send_buff[j] = (char)c;
                             }
-                            rv = send(
-                                cfd,
-                                send_buff,
-                                j,
-                                MSG_NOSIGNAL |
-                                    (i == (response.finfo.length / CHUNK_SIZE)
-                                         ? 0
-                                         : MSG_MORE)
-                            );
-                            if (rv < 0) {
-                                int en = errno;
-                                NP_DEBUG_ERR("send() %s\n", strerror(en));
-                                goto clean_exit;
+                            send_amount = 0;
+                            while (send_amount < j) {
+                                rv = send(
+                                    cfd,
+                                    send_buff + send_amount,
+                                    j - send_amount,
+                                    MSG_NOSIGNAL
+                                );
+                                if (rv < 0) {
+                                    int en = errno;
+                                    NP_DEBUG_ERR("send() %s\n", strerror(en));
+                                    goto clean_exit;
+                                }
+                                send_amount += rv;
                             }
                         }
                         fclose(fptr);
                     }
 
+                    if (response.code == 200) {
+                        const char* connect_str = "none";
+                        if (request.headers.connection ==
+                            REQ_CONNECTION_KEEP_ALIVE) {
+                            connect_str = "keep-alive";
+                        } else if (request.headers.connection ==
+                                   REQ_CONNECTION_CLOSE) {
+                            connect_str = "close";
+                        }
+                        NP_DEBUG_MSG(
+                            "%i: %s%-48s%s Connection: %s\n",
+                            cpid,
+                            "\e[33m",
+                            request.line.uri,
+                            "\e[0m",
+                            connect_str
+                        );
+                    }
+
                     // clear recv_buff
                     memset(recv_buff, 0, recv_count);
-                    if (request.headers.connection == REQ_CONNECTION_CLOSE) {
+                    recv_buffer_index = 0;
+                    if (request.headers.connection !=
+                        REQ_CONNECTION_KEEP_ALIVE) {
                         goto clean_exit;
                     }
                 }
@@ -203,8 +219,8 @@ int main(int argc, char** argv)
 
         // if parent shutdown(clie_fd, SHUT_WR) then childs pipe will break.
         // so child is responsable for shutting down the socket
-        child_count++;
         close(cfd);
+        child_count++;
         cfd = -1;
     }
 }

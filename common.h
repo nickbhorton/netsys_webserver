@@ -78,6 +78,8 @@ typedef struct {
     socklen_t addrlen;
 } Address;
 
+size_t http_nlen(const char* src, size_t max);
+
 /* Creates a WsRequest from some char*.
  * If WsRequest cannot be created then method will be set to the
  * correct error.
