@@ -105,7 +105,7 @@ const char* get_content_type(const char* path);
  */
 int uri_to_path(char uri[WS_URI_BUFFER_SIZE]);
 
-HttpResponse get_response(HttpRequest* req);
+HttpResponse HttpResponse_create(HttpRequest* req);
 
 int headers_connection_parse(const char* from, size_t max_len);
 

@@ -109,7 +109,7 @@ int main(int argc, char** argv)
                     }
 
                     HttpRequest request = HttpRequest_create(recv_buff);
-                    HttpResponse response = get_response(&request);
+                    HttpResponse response = HttpResponse_create(&request);
 
                     // send header
                     size_t send_amount = 0;

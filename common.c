@@ -356,7 +356,7 @@ static void add_connection_header(String* str, int connection_header)
     }
 }
 
-HttpResponse get_response(HttpRequest* req)
+HttpResponse HttpResponse_create(HttpRequest* req)
 {
     HttpResponse ret;
     ret.header = String_new();
