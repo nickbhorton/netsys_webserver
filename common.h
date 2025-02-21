@@ -16,7 +16,7 @@
 // URI_BUFFER_SIZE - strlen(ROOT_DIR)
 #define WS_PATH_BUFFER_SIZE 1021
 
-#define WS_CHILD_TIMEOUT 1000
+#define WS_CHILD_TIMEOUT 10000
 
 // Request Methods
 #define REQ_METHOD_GET 1
