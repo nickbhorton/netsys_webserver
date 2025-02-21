@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS_DEBUG=-g -Wall -Werror -fsanitize=address
-CFLAGS_STRACE=-g3 -Wall -Werror
+CFLAGS_STRACE=-g -O3 -Wall -Werror
 CFLAGS_RELEASE=-O3 -Wall -Werror
 CFLAGS=$(CFLAGS_STRACE)
 
