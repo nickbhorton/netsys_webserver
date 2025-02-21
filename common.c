@@ -1,5 +1,4 @@
 #include "common.h"
-#include "String.h"
 #include "debug_macros.h"
 
 #include <arpa/inet.h>
@@ -289,77 +288,13 @@ int headers_connection_parse(const char* from, size_t max_len)
     return 0;
 }
 
-static void add_response_code(HttpResponse* response, uint32_t code)
-{
-    switch (code) {
-    case 200:
-        String_push_cstr(&response->header, HTTP_200);
-        response->code = 200;
-        break;
-    case 400:
-        String_push_cstr(&response->header, HTTP_400);
-        response->code = 400;
-        break;
-    case 403:
-        String_push_cstr(&response->header, HTTP_403);
-        response->code = 403;
-        break;
-    case 404:
-        String_push_cstr(&response->header, HTTP_404);
-        response->code = 404;
-        break;
-    case 405:
-        String_push_cstr(&response->header, HTTP_405);
-        response->code = 405;
-        break;
-    case 414:
-        String_push_cstr(&response->header, HTTP_414);
-        response->code = 414;
-        break;
-    case 500:
-        String_push_cstr(&response->header, HTTP_500);
-        response->code = 500;
-        break;
-    case 505:
-        String_push_cstr(&response->header, HTTP_505);
-        response->code = 505;
-        break;
-    default:
-        String_push_cstr(&response->header, HTTP_500);
-        response->code = 500;
-        break;
-    }
-}
-
-/*
-static void response_file_error(HttpResponse* response, int en)
-{
-    switch (en) {
-    case EACCES:
-        add_response_code(response, 403);
-        break;
-    case ENOENT:
-    default:
-        add_response_code(response, 404);
-    }
-}
-*/
-
-static void add_connection_header(String* str, int connection_header)
-{
-    // keep alive or close
-    if (connection_header == REQ_CONNECTION_CLOSE || connection_header == 0) {
-        String_push_cstr(str, "Connection: close\r\n");
-    } else {
-        String_push_cstr(str, "Connection: keep-alive\r\n");
-        String_push_cstr(str, "Keep-Alive: timeout=1, max=200\r\n");
-    }
-}
-
-HttpResponse HttpResponse_create(HttpRequest* req)
+static const char* connection_close_cstr = "Connection: close\r\n";
+static const char* connection_keepalive_str = "Connection: keep-alive\r\n";
+static const char* connection_keepalive_timeout_str = "Keep-Alive: timeout=1, max=200\r\n";
+HttpResponse HttpResponse_create(HttpRequest* req, char* header_buffer, size_t header_buffer_size)
 {
     HttpResponse ret;
-    ret.header = String_new();
+    char* head_ptr = header_buffer;
 
     const char* http_version_str;
     switch (req->line.version) {
@@ -372,10 +307,28 @@ HttpResponse HttpResponse_create(HttpRequest* req)
     case REQ_VERSION_2_0:
     default:
         // Version not supported error
-        String_push_cstr(&ret.header, HTTP_1_1);
-        add_response_code(&ret, 505);
-        add_connection_header(&ret.header, req->headers.connection);
-        String_push_cstr(&ret.header, "\r\n");
+
+        strcpy(head_ptr, HTTP_1_1);
+        head_ptr += strlen(HTTP_1_1);
+
+        ret.code = 505;
+        strcpy(head_ptr, HTTP_505);
+        head_ptr += strlen(HTTP_505);
+
+        if (req->headers.connection == REQ_CONNECTION_CLOSE || req->headers.connection == 0) {
+            strcpy(head_ptr, connection_close_cstr);
+            head_ptr += strlen(connection_close_cstr);
+        } else {
+            strcpy(head_ptr, connection_keepalive_str);
+            head_ptr += strlen(connection_keepalive_str);
+            strcpy(head_ptr, connection_keepalive_timeout_str);
+            head_ptr += strlen(connection_keepalive_timeout_str);
+        }
+
+        strcpy(head_ptr, "\r\n");
+        head_ptr += strlen("\r\n");
+
+        ret.header_size = head_ptr - header_buffer;
         return ret;
     }
 
@@ -383,40 +336,108 @@ HttpResponse HttpResponse_create(HttpRequest* req)
     if (req->line.method >= REQ_ERROR) {
         switch (req->line.method) {
         case REQ_ERROR_URI_SIZE:
-            String_push_cstr(&ret.header, http_version_str);
-            add_response_code(&ret, 414);
-            add_connection_header(&ret.header, req->headers.connection);
-            String_push_cstr(&ret.header, "\r\n");
+            strcpy(head_ptr, http_version_str);
+            head_ptr += strlen(http_version_str);
+
+            ret.code = 414;
+            strcpy(head_ptr, HTTP_414);
+            head_ptr += strlen(HTTP_414);
+
+            if (req->headers.connection == REQ_CONNECTION_CLOSE || req->headers.connection == 0) {
+                strcpy(head_ptr, connection_close_cstr);
+                head_ptr += strlen(connection_close_cstr);
+            } else {
+                strcpy(head_ptr, connection_keepalive_str);
+                head_ptr += strlen(connection_keepalive_str);
+                strcpy(head_ptr, connection_keepalive_timeout_str);
+                head_ptr += strlen(connection_keepalive_timeout_str);
+            }
+
+            strcpy(head_ptr, "\r\n");
+            head_ptr += strlen("\r\n");
+
+            ret.header_size = head_ptr - header_buffer;
             return ret;
 
         case REQ_ERROR_URI_PARSE:
         case REQ_ERROR_METHOD_PARSE:
         case REQ_ERROR_VERSION_PARSE:
         default:
-            String_push_cstr(&ret.header, http_version_str);
-            add_response_code(&ret, 400);
-            add_connection_header(&ret.header, req->headers.connection);
-            String_push_cstr(&ret.header, "\r\n");
+            strcpy(head_ptr, http_version_str);
+            head_ptr += strlen(http_version_str);
+
+            ret.code = 400;
+            strcpy(head_ptr, HTTP_400);
+            head_ptr += strlen(HTTP_400);
+
+            if (req->headers.connection == REQ_CONNECTION_CLOSE || req->headers.connection == 0) {
+                strcpy(head_ptr, connection_close_cstr);
+                head_ptr += strlen(connection_close_cstr);
+            } else {
+                strcpy(head_ptr, connection_keepalive_str);
+                head_ptr += strlen(connection_keepalive_str);
+                strcpy(head_ptr, connection_keepalive_timeout_str);
+                head_ptr += strlen(connection_keepalive_timeout_str);
+            }
+
+            strcpy(head_ptr, "\r\n");
+            head_ptr += strlen("\r\n");
+
+            ret.header_size = head_ptr - header_buffer;
             return ret;
         }
     }
 
     // only support GET and HEAD
     if (req->line.method != REQ_METHOD_GET && req->line.method != REQ_METHOD_HEAD) {
-        String_push_cstr(&ret.header, http_version_str);
-        add_response_code(&ret, 405);
-        add_connection_header(&ret.header, req->headers.connection);
-        String_push_cstr(&ret.header, "\r\n");
+        strcpy(head_ptr, http_version_str);
+        head_ptr += strlen(http_version_str);
+
+        ret.code = 405;
+        strcpy(head_ptr, HTTP_405);
+        head_ptr += strlen(HTTP_405);
+
+        if (req->headers.connection == REQ_CONNECTION_CLOSE || req->headers.connection == 0) {
+            strcpy(head_ptr, connection_close_cstr);
+            head_ptr += strlen(connection_close_cstr);
+        } else {
+            strcpy(head_ptr, connection_keepalive_str);
+            head_ptr += strlen(connection_keepalive_str);
+            strcpy(head_ptr, connection_keepalive_timeout_str);
+            head_ptr += strlen(connection_keepalive_timeout_str);
+        }
+
+        strcpy(head_ptr, "\r\n");
+        head_ptr += strlen("\r\n");
+
+        ret.header_size = head_ptr - header_buffer;
         return ret;
     }
 
     // getting the path for the file requested
     int rv = uri_to_path(req->line.uri);
     if (rv < 0) {
-        String_push_cstr(&ret.header, http_version_str);
-        add_response_code(&ret, 500);
-        add_connection_header(&ret.header, req->headers.connection);
-        String_push_cstr(&ret.header, "\r\n");
+        strcpy(head_ptr, http_version_str);
+        head_ptr += strlen(http_version_str);
+
+        ret.code = 500;
+        strcpy(head_ptr, HTTP_500);
+        head_ptr += strlen(HTTP_500);
+
+        if (req->headers.connection == REQ_CONNECTION_CLOSE || req->headers.connection == 0) {
+            strcpy(head_ptr, connection_close_cstr);
+            head_ptr += strlen(connection_close_cstr);
+        } else {
+            strcpy(head_ptr, connection_keepalive_str);
+            head_ptr += strlen(connection_keepalive_str);
+            strcpy(head_ptr, connection_keepalive_timeout_str);
+            head_ptr += strlen(connection_keepalive_timeout_str);
+        }
+
+        strcpy(head_ptr, "\r\n");
+        head_ptr += strlen("\r\n");
+
+        ret.header_size = head_ptr - header_buffer;
         return ret;
     }
 
@@ -425,17 +446,51 @@ HttpResponse HttpResponse_create(HttpRequest* req)
     if (ret.finfo.result) {
         switch (ret.finfo.result) {
         case EACCES:
-            String_push_cstr(&ret.header, http_version_str);
-            add_response_code(&ret, 403);
-            add_connection_header(&ret.header, req->headers.connection);
-            String_push_cstr(&ret.header, "\r\n");
+            strcpy(head_ptr, http_version_str);
+            head_ptr += strlen(http_version_str);
+
+            ret.code = 403;
+            strcpy(head_ptr, HTTP_403);
+            head_ptr += strlen(HTTP_403);
+
+            if (req->headers.connection == REQ_CONNECTION_CLOSE || req->headers.connection == 0) {
+                strcpy(head_ptr, connection_close_cstr);
+                head_ptr += strlen(connection_close_cstr);
+            } else {
+                strcpy(head_ptr, connection_keepalive_str);
+                head_ptr += strlen(connection_keepalive_str);
+                strcpy(head_ptr, connection_keepalive_timeout_str);
+                head_ptr += strlen(connection_keepalive_timeout_str);
+            }
+
+            strcpy(head_ptr, "\r\n");
+            head_ptr += strlen("\r\n");
+
+            ret.header_size = head_ptr - header_buffer;
             break;
         case ENOENT:
         default:
-            String_push_cstr(&ret.header, http_version_str);
-            add_response_code(&ret, 404);
-            add_connection_header(&ret.header, req->headers.connection);
-            String_push_cstr(&ret.header, "\r\n");
+            strcpy(head_ptr, http_version_str);
+            head_ptr += strlen(http_version_str);
+
+            ret.code = 404;
+            strcpy(head_ptr, HTTP_404);
+            head_ptr += strlen(HTTP_404);
+
+            if (req->headers.connection == REQ_CONNECTION_CLOSE || req->headers.connection == 0) {
+                strcpy(head_ptr, connection_close_cstr);
+                head_ptr += strlen(connection_close_cstr);
+            } else {
+                strcpy(head_ptr, connection_keepalive_str);
+                head_ptr += strlen(connection_keepalive_str);
+                strcpy(head_ptr, connection_keepalive_timeout_str);
+                head_ptr += strlen(connection_keepalive_timeout_str);
+            }
+
+            strcpy(head_ptr, "\r\n");
+            head_ptr += strlen("\r\n");
+
+            ret.header_size = head_ptr - header_buffer;
         }
         return ret;
     }
@@ -443,10 +498,27 @@ HttpResponse HttpResponse_create(HttpRequest* req)
     // getting the content type of file path
     const char* content_type = get_content_type(req->line.uri);
     if (strlen(content_type) == 0) {
-        String_push_cstr(&ret.header, http_version_str);
-        add_response_code(&ret, 400);
-        add_connection_header(&ret.header, req->headers.connection);
-        String_push_cstr(&ret.header, "\r\n");
+        strcpy(head_ptr, http_version_str);
+        head_ptr += strlen(http_version_str);
+
+        ret.code = 400;
+        strcpy(head_ptr, HTTP_400);
+        head_ptr += strlen(HTTP_400);
+
+        if (req->headers.connection == REQ_CONNECTION_CLOSE || req->headers.connection == 0) {
+            strcpy(head_ptr, connection_close_cstr);
+            head_ptr += strlen(connection_close_cstr);
+        } else {
+            strcpy(head_ptr, connection_keepalive_str);
+            head_ptr += strlen(connection_keepalive_str);
+            strcpy(head_ptr, connection_keepalive_timeout_str);
+            head_ptr += strlen(connection_keepalive_timeout_str);
+        }
+
+        strcpy(head_ptr, "\r\n");
+        head_ptr += strlen("\r\n");
+
+        ret.header_size = head_ptr - header_buffer;
         return ret;
     }
 
@@ -454,26 +526,47 @@ HttpResponse HttpResponse_create(HttpRequest* req)
     // success
     //
 
-    String_push_cstr(&ret.header, http_version_str);
-    add_response_code(&ret, 200);
-    add_connection_header(&ret.header, req->headers.connection);
+    strcpy(head_ptr, http_version_str);
+    head_ptr += strlen(http_version_str);
+
+    ret.code = 200;
+    strcpy(head_ptr, HTTP_200);
+    head_ptr += strlen(HTTP_200);
+
+    if (req->headers.connection == REQ_CONNECTION_CLOSE || req->headers.connection == 0) {
+        strcpy(head_ptr, connection_close_cstr);
+        head_ptr += strlen(connection_close_cstr);
+    } else {
+        strcpy(head_ptr, connection_keepalive_str);
+        head_ptr += strlen(connection_keepalive_str);
+        strcpy(head_ptr, connection_keepalive_timeout_str);
+        head_ptr += strlen(connection_keepalive_timeout_str);
+    }
 
     // content type
-    String_push_cstr(&ret.header, "Content-Type: ");
-    String_push_cstr(&ret.header, content_type);
-    String_push_cstr(&ret.header, "\r\n");
+    strcpy(head_ptr, "Content-Type: ");
+    head_ptr += strlen("Content-Type: ");
+    strcpy(head_ptr, content_type);
+    head_ptr += strlen(content_type);
+    strcpy(head_ptr, "\r\n");
+    head_ptr += strlen("\r\n");
 
     // content length
-    String_push_cstr(&ret.header, "Content-Length: ");
-    char buffer[128];
-    memset(buffer, 0, 128);
-    snprintf(buffer, 128, "%zu", ret.finfo.length);
-    String_push_cstr(&ret.header, buffer);
-    String_push_cstr(&ret.header, "\r\n");
+    strcpy(head_ptr, "Content-Length: ");
+    head_ptr += strlen("Content-Length: ");
 
-    // server
-    String_push_cstr(&ret.header, "Server: nbh\r\n");
-    String_push_cstr(&ret.header, "\r\n");
+    static char buffer[128];
+    int snprintf_bytes = snprintf(buffer, 128, "%zu", ret.finfo.length);
+
+    strncpy(head_ptr, buffer, snprintf_bytes);
+    head_ptr += snprintf_bytes;
+    strcpy(head_ptr, "\r\n");
+    head_ptr += strlen("\r\n");
+
+    strcpy(head_ptr, "\r\n");
+    head_ptr += strlen("\r\n");
+
+    ret.header_size = head_ptr - header_buffer;
     return ret;
 }
 

@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -110,15 +111,15 @@ int main(int argc, char** argv)
                     }
 
                     HttpRequest request = HttpRequest_create(recv_buff);
-                    HttpResponse response = HttpResponse_create(&request);
+                    HttpResponse response = HttpResponse_create(&request, send_buff, CHUNK_SIZE);
 
                     // send header
-                    size_t file_bytes_sent = 0;
-                    while (file_bytes_sent < response.header.len) {
+                    size_t header_bytes_sent = 0;
+                    while (header_bytes_sent < response.header_size) {
                         rv = send(
                             cfd,
-                            response.header.data + file_bytes_sent,
-                            response.header.len - file_bytes_sent,
+                            send_buff + header_bytes_sent,
+                            response.header_size - header_bytes_sent,
                             MSG_NOSIGNAL
                         );
                         if (rv < 0) {
@@ -126,10 +127,8 @@ int main(int argc, char** argv)
                             NP_DEBUG_ERR("send() %s\n", strerror(en));
                             goto clean_exit;
                         }
-                        file_bytes_sent += rv;
+                        header_bytes_sent += rv;
                     }
-
-                    String_free(&response.header);
 
                     // send the file in chunks
                     if (response.code == 200 && request.line.method == REQ_METHOD_GET) {
@@ -139,7 +138,7 @@ int main(int argc, char** argv)
                             goto clean_exit;
                         }
 
-                        file_bytes_sent = 0;
+                        size_t file_bytes_sent = 0;
                         while (file_bytes_sent < response.finfo.length) {
                             // put bytes into the send buffer
                             size_t chunk_bytes_read = fread(send_buff, 1, CHUNK_SIZE, fptr);

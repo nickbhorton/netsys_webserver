@@ -5,8 +5,6 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
-#include "String.h"
-
 #define WS_BUFFER_SIZE 2048
 
 #define WS_URI_BUFFER_SIZE 1024
@@ -69,7 +67,7 @@ typedef struct {
 
 typedef struct {
     uint32_t code;
-    String header;
+    ptrdiff_t header_size;
     FileInfo finfo;
 } HttpResponse;
 
@@ -105,7 +103,7 @@ const char* get_content_type(const char* path);
  */
 int uri_to_path(char uri[WS_URI_BUFFER_SIZE]);
 
-HttpResponse HttpResponse_create(HttpRequest* req);
+HttpResponse HttpResponse_create(HttpRequest* req, char* header_buffer, size_t header_buffer_size);
 
 int headers_connection_parse(const char* from, size_t max_len);
 
