@@ -5,3 +5,5 @@ server
 
 www
 aria2c.log
+
+callgrind*

@@ -76,7 +76,6 @@ int main(int argc, char** argv)
         int cpid;
         if (!(cpid = fork())) {
             child_setup_signal_handlers();
-
             close(sfd); // close listener
             cpid = getpid();
 
@@ -114,12 +113,12 @@ int main(int argc, char** argv)
                     HttpResponse response = HttpResponse_create(&request);
 
                     // send header
-                    size_t sent_bytes = 0;
-                    while (sent_bytes < response.header.len) {
+                    size_t file_bytes_sent = 0;
+                    while (file_bytes_sent < response.header.len) {
                         rv = send(
                             cfd,
-                            response.header.data + sent_bytes,
-                            response.header.len - sent_bytes,
+                            response.header.data + file_bytes_sent,
+                            response.header.len - file_bytes_sent,
                             MSG_NOSIGNAL
                         );
                         if (rv < 0) {
@@ -127,7 +126,7 @@ int main(int argc, char** argv)
                             NP_DEBUG_ERR("send() %s\n", strerror(en));
                             goto clean_exit;
                         }
-                        sent_bytes += rv;
+                        file_bytes_sent += rv;
                     }
 
                     String_free(&response.header);
@@ -140,29 +139,28 @@ int main(int argc, char** argv)
                             goto clean_exit;
                         }
 
-                        // for all file chunks
-                        for (size_t i = 0; i < (response.finfo.length / CHUNK_SIZE) + 1; i++) {
+                        file_bytes_sent = 0;
+                        while (file_bytes_sent < response.finfo.length) {
                             // put bytes into the send buffer
-                            int c;
-                            size_t j = 0;
-                            for (; j < CHUNK_SIZE; j++) {
-                                if ((c = fgetc(fptr)) == EOF) {
-                                    break;
-                                }
-                                send_buff[j] = (char)c;
-                            }
+                            size_t chunk_bytes_read = fread(send_buff, 1, CHUNK_SIZE, fptr);
 
                             // send the current send buffer to the client
-                            sent_bytes = 0;
-                            while (sent_bytes < j) {
-                                rv = send(cfd, send_buff + sent_bytes, j - sent_bytes, MSG_NOSIGNAL);
+                            size_t chunk_bytes_sent = 0;
+                            while (chunk_bytes_sent < chunk_bytes_read) {
+                                rv = send(
+                                    cfd,
+                                    send_buff + chunk_bytes_sent,
+                                    chunk_bytes_read - chunk_bytes_sent,
+                                    MSG_NOSIGNAL
+                                );
                                 if (rv < 0) {
                                     int en = errno;
                                     NP_DEBUG_ERR("send() %s\n", strerror(en));
                                     goto clean_exit;
                                 }
-                                sent_bytes += rv;
+                                chunk_bytes_sent += rv;
                             }
+                            file_bytes_sent += chunk_bytes_sent;
                         }
                         fclose(fptr);
                     }
@@ -207,26 +205,6 @@ int main(int argc, char** argv)
     }
 }
 
-// This handler is called when the parent process recieves the SIGCHLD signal
-// (which indicates that the child has exited). When a child exits its resources
-// need to be cleaned up (this is what the waitpid call will do). If this is not
-// done, when the parent exits the child will become a 'zombie'. Meaning it is
-// 'dead' (exited) but its resources have not been cleaned up. The dead child is
-// reparented to init process.
-void sigchld_handler(int signal)
-{
-    // this handler can screw up errno
-    int en = errno;
-
-    pid_t pid = 0;
-    int status;
-    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-        NP_DEBUG_MSG("\e[31mSIGCHLD\e[0m pid %i, status %i\n", pid, status);
-    }
-    // reset errno
-    errno = en;
-}
-
 void parent_sigint_handler(int signal)
 {
     NP_DEBUG_MSG("parent %i SIGINT handler\n", getpid());
@@ -236,7 +214,7 @@ void parent_sigint_handler(int signal)
     while (true) {
         child_pid = waitpid(-1, &status, 0);
         if (child_pid == -1 && errno == ECHILD) {
-            NP_DEBUG_MSG("parent %i children have all been reaped parent can exit\n", getpid());
+            // NP_DEBUG_MSG("parent %i children have all been reaped parent can exit\n", getpid());
             break;
         } else if (child_pid == -1) {
             int en = errno;
@@ -244,7 +222,6 @@ void parent_sigint_handler(int signal)
         } else {
             NP_DEBUG_MSG("\e[31m%i\e[0m reaped child, status %i\n", child_pid, status);
         }
-        fflush(stdout);
     }
 
     int rv = shutdown(sfd, 2);
@@ -257,32 +234,16 @@ void parent_sigint_handler(int signal)
     exit(0);
 }
 
-void child_sigint_handler(int signal)
-{
-    int rv = shutdown(cfd, SHUT_RDWR);
-    if (rv < 0) {
-        int en = errno;
-        NP_DEBUG_ERR("shutdown() %s\n", strerror(en));
-    }
-    NP_DEBUG_MSG("child %i SIGINT recieved, exited cleanly\n", getpid());
-    fflush(stdout);
-    fflush(stderr);
-    exit(0);
-}
-
 void parent_setup_signal_handlers()
 {
     int rv;
     struct sigaction sa;
     sigemptyset(&sa.sa_mask);
 
-    // This flag indicates that if a handler is called in the middle of a
-    // systemcall then after the handler is done the systemcall is restarted
-    sa.sa_flags = SA_RESTART;
-    sa.sa_handler = sigchld_handler;
+    sa.sa_flags = 0;
+    sa.sa_handler = SIG_IGN;
     FatalCheckErrno(rv, sigaction(SIGCHLD, &sa, NULL), "SIGCHLD sigaction()");
 
-    sa.sa_flags = 0;
     sa.sa_handler = parent_sigint_handler;
     FatalCheckErrno(rv, sigaction(SIGINT, &sa, NULL), "parent SIGINT sigaction()");
 }
@@ -292,13 +253,11 @@ void child_setup_signal_handlers()
     int rv;
     struct sigaction sa;
     sigemptyset(&sa.sa_mask);
+
     sa.sa_flags = 0;
 
     sa.sa_handler = SIG_DFL;
     FatalCheckErrno(rv, sigaction(SIGINT, &sa, NULL), "reset child SIGINT sigaction()");
-    FatalCheckErrno(rv, sigaction(SIGCHLD, &sa, NULL), "reset child SIGCHILD sigaction()");
-
-    sa.sa_handler = child_sigint_handler;
     FatalCheckErrno(rv, sigaction(SIGINT, &sa, NULL), "child SIGINT sigaction()");
 }
 
