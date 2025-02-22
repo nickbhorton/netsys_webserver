@@ -89,6 +89,15 @@ typedef struct {
     socklen_t addrlen;
 } Address;
 
+typedef struct {
+    const char* ptr;
+    size_t size;
+} StringView;
+
+void compute_hashes();
+
+StringView parse_word(const char* src, size_t max);
+
 size_t http_nlen(const char* src, size_t max);
 
 /* Creates a WsRequest from some char*.

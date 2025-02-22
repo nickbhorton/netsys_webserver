@@ -26,6 +26,15 @@ static const char* HTTP_414 = "414 URI Too Long\r\n";
 static const char* HTTP_500 = "500 Internal Sever Error\r\n";
 static const char* HTTP_505 = "505 HTTP Versoin Not Supported\r\n";
 
+static int text_hash(const char* text, size_t size)
+{
+    int ret = 0;
+    for (size_t i = 0; i < size; i++) {
+        ret += (int)text[i];
+    }
+    return ret;
+}
+
 #define CONTENT_TYPE_COUNT 16
 static char content_type_trans[CONTENT_TYPE_COUNT][2][64] = {
     {"html", "text/html"},
@@ -48,19 +57,17 @@ static char content_type_trans[CONTENT_TYPE_COUNT][2][64] = {
 };
 
 #define HTTP_METHOD_COUNT 9
-const char http_methods[HTTP_METHOD_COUNT][8] =
+static const char http_methods[HTTP_METHOD_COUNT][8] =
     {"GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE", "POST", "PATCH", "CONNECT"};
-const int http_methods_index[HTTP_METHOD_COUNT] = {
-    REQ_METHOD_GET,
-    REQ_METHOD_HEAD,
-    REQ_METHOD_OPTIONS,
-    REQ_METHOD_TRACE,
-    REQ_METHOD_PUT,
-    REQ_METHOD_DELETE,
-    REQ_METHOD_POST,
-    REQ_METHOD_PATCH,
-    REQ_METHOD_CONNECT,
-};
+#define RMH_GET 224
+#define RMH_HEAD 274
+#define RMH_OPTIONS 556
+#define RMH_TRACE 367
+#define RMH_PUT 249
+#define RMH_DELETE 435
+#define RMH_POST 326
+#define RMH_PATCH 368
+#define RMH_CONNECT 522
 
 #define HTTP_VERSION_COUNT 3
 const char http_versions[HTTP_VERSION_COUNT][16] = {
@@ -73,6 +80,13 @@ const int http_versions_index[HTTP_VERSION_COUNT] = {
     REQ_VERSION_1_1,
     REQ_VERSION_2_0,
 };
+
+void compute_hashes()
+{
+    for (size_t m = 0; m < HTTP_METHOD_COUNT; m++) {
+        printf("%s -> %i\n", http_methods[m], text_hash(http_methods[m], strlen(http_methods[m])));
+    }
+}
 
 static bool is_whitespace(char c) { return c == ' ' || c == '\r' || c == '\t'; }
 
@@ -88,9 +102,23 @@ size_t http_nlen(const char* src, size_t max)
     return max;
 }
 
+StringView parse_word(const char* src, size_t max)
+{
+    size_t i = 0;
+    StringView ret = {};
+    while (is_whitespace(src[i]) && i < max) {
+        i++;
+    }
+    ret.ptr = src + i;
+    while (!is_whitespace(src[i]) && i < max) {
+        ret.size++;
+        i++;
+    }
+    return ret;
+}
+
 HttpRequestLine HttpRequestLine_create(const char from[WS_BUFFER_SIZE])
 {
-    // initalize everything to 0
     HttpRequestLine rv = {};
 
     size_t request_line_len = http_nlen(from, WS_BUFFER_SIZE);
@@ -99,23 +127,47 @@ HttpRequestLine HttpRequestLine_create(const char from[WS_BUFFER_SIZE])
         return rv;
     }
 
-    unsigned int i = 0;
-    for (; i < request_line_len; i++) {
-        for (size_t j = 0; j < HTTP_METHOD_COUNT; j++) {
-            unsigned int method_len = strlen(http_methods[j]);
-            if (strncmp(from + i, http_methods[j], method_len) == 0 && is_whitespace(from[i + method_len])) {
-                rv.method = http_methods_index[j];
-                i += method_len + 1;
-                goto http_method_done;
-            }
-        }
+    StringView method_sv = parse_word(from, WS_BUFFER_SIZE);
+    int method_hashed = text_hash(method_sv.ptr, method_sv.size);
+
+    switch (method_hashed) {
+    case RMH_GET:
+        rv.method = REQ_METHOD_GET;
+        break;
+    case RMH_HEAD:
+        rv.method = REQ_METHOD_HEAD;
+        break;
+    case RMH_OPTIONS:
+        rv.method = REQ_METHOD_OPTIONS;
+        break;
+    case RMH_TRACE:
+        rv.method = REQ_METHOD_TRACE;
+        break;
+    case RMH_PUT:
+        rv.method = REQ_METHOD_PUT;
+        break;
+    case RMH_DELETE:
+        rv.method = REQ_METHOD_DELETE;
+        break;
+    case RMH_POST:
+        rv.method = REQ_METHOD_POST;
+        break;
+    case RMH_PATCH:
+        rv.method = REQ_METHOD_PATCH;
+        break;
+    case RMH_CONNECT:
+        rv.method = REQ_METHOD_CONNECT;
+        break;
+    default:
+        rv.method = 0;
     }
 
-http_method_done:
     if (rv.method == 0) {
         rv.method = REQ_ERROR_METHOD_PARSE;
         return rv;
     }
+
+    unsigned int i = (method_sv.ptr - from) + method_sv.size;
 
     size_t uri_start_index = 0;
     size_t uri_end_index = 0;
@@ -138,7 +190,7 @@ http_method_done:
         for (size_t j = 0; j < HTTP_VERSION_COUNT; j++) {
             unsigned int version_len = strlen(http_versions[j]);
             if (strncmp(from + i, http_versions[j], version_len) == 0 && is_whitespace(from[i + version_len])) {
-                rv.version = http_methods_index[j];
+                rv.version = http_versions_index[j];
                 i += version_len + 1;
                 goto http_version_done;
             }

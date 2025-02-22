@@ -58,6 +58,7 @@ int main(int argc, char** argv)
     }
 
     parent_setup_signal_handlers();
+    compute_hashes();
 
     Address server_address;
     int rv;

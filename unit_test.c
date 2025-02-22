@@ -270,6 +270,27 @@ void happy_request_create()
     }
 }
 
+void happy_parse_word()
+{
+    char tests[][WS_BUFFER_SIZE] = {
+        "GET",
+        "  GET",
+        "  GET    ",
+        "  GETTING    ",
+    };
+    StringView ans[] = {
+        {.ptr = tests[0] + 0, .size = 3},
+        {.ptr = tests[1] + 2, .size = 3},
+        {.ptr = tests[2] + 2, .size = 3},
+        {.ptr = tests[3] + 2, .size = 7},
+    };
+    for (size_t i = 0; i < sizeof(ans) / sizeof(StringView); i++) {
+        StringView req = parse_word(tests[i], strlen(tests[i]));
+        CU_ASSERT(ans[i].ptr == req.ptr);
+        CU_ASSERT(ans[i].size == req.size);
+    }
+}
+
 int main()
 {
     CU_initialize_registry();
@@ -285,7 +306,9 @@ int main()
     CU_add_test(suite2, "map specific uris happy", happy_sanitize_uri);
     CU_add_test(suite2, "connection parse header happy", happy_connection_parse_header);
     CU_add_test(suite2, "http request create happy", happy_request_create);
+    CU_add_test(suite2, "http parse word", happy_parse_word);
     CU_basic_run_tests();
     CU_cleanup_registry();
+
     return 0;
 }
