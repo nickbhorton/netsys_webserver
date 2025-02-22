@@ -58,7 +58,7 @@ int main(int argc, char** argv)
     }
 
     parent_setup_signal_handlers();
-    compute_hashes();
+    // compute_hashes();
 
     Address server_address;
     int rv;
@@ -90,7 +90,7 @@ int main(int argc, char** argv)
 
             char send_buff[CHUNK_SIZE];
 
-            for (size_t r = 0; r < 200; r++) {
+            for (size_t r = 0; r < 500; r++) {
                 int num_events = poll(pfd, 1, WS_CHILD_TIMEOUT);
                 if (num_events == 0) {
                     goto clean_exit;

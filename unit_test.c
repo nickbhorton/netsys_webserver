@@ -122,15 +122,15 @@ void request_version_parse_error(void)
     const char req[WS_BUFFER_SIZE] = "GET / HTP/1.1\r\n";
     HttpRequestLine wreq = HttpRequestLine_create(req);
     CU_ASSERT(wreq.method == REQ_ERROR_VERSION_PARSE);
-    CU_ASSERT(wreq.version == 0);
+    CU_ASSERT(wreq.version == REQ_ERROR_VERSION_PARSE);
 }
 
 void request_uri_parse_error(void)
 {
     const char req[WS_BUFFER_SIZE] = "GET /HTTP/1.1\r\n";
     HttpRequestLine wreq = HttpRequestLine_create(req);
-    CU_ASSERT(wreq.method == REQ_ERROR_URI_PARSE);
-    CU_ASSERT(wreq.version == 0);
+    CU_ASSERT(wreq.method == REQ_ERROR_VERSION_PARSE);
+    CU_ASSERT(wreq.version == REQ_ERROR_VERSION_PARSE);
 }
 
 void request_uri_size_error(void)

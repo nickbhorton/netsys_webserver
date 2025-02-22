@@ -29,8 +29,8 @@ static const char* HTTP_505 = "505 HTTP Versoin Not Supported\r\n";
 static int text_hash(const char* text, size_t size)
 {
     int ret = 0;
-    for (size_t i = 0; i < size; i++) {
-        ret += (int)text[i];
+    for (size_t i = 0; i < size - 1; i++) {
+        ret += (int)text[i] * (int)text[i + 1];
     }
     return ret;
 }
@@ -59,15 +59,15 @@ static char content_type_trans[CONTENT_TYPE_COUNT][2][64] = {
 #define HTTP_METHOD_COUNT 9
 static const char http_methods[HTTP_METHOD_COUNT][8] =
     {"GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE", "POST", "PATCH", "CONNECT"};
-#define RMH_GET 224
-#define RMH_HEAD 274
-#define RMH_OPTIONS 556
-#define RMH_TRACE 367
-#define RMH_PUT 249
-#define RMH_DELETE 435
-#define RMH_POST 326
-#define RMH_PATCH 368
-#define RMH_CONNECT 522
+#define RMH_GET 10695
+#define RMH_HEAD 13873
+#define RMH_OPTIONS 37575
+#define RMH_TRACE 21196
+#define RMH_PUT 13940
+#define RMH_DELETE 26772
+#define RMH_POST 19849
+#define RMH_PATCH 21112
+#define RMH_CONNECT 33172
 
 #define HTTP_VERSION_COUNT 3
 const char http_versions[HTTP_VERSION_COUNT][16] = {
@@ -75,16 +75,17 @@ const char http_versions[HTTP_VERSION_COUNT][16] = {
     "HTTP/1.1",
     "HTTP/2.0",
 };
-const int http_versions_index[HTTP_VERSION_COUNT] = {
-    REQ_VERSION_1_0,
-    REQ_VERSION_1_1,
-    REQ_VERSION_2_0,
-};
+#define RVH_1_0 30349
+#define RVH_1_1 30395
+#define RVH_2_0 30442
 
 void compute_hashes()
 {
     for (size_t m = 0; m < HTTP_METHOD_COUNT; m++) {
         printf("%s -> %i\n", http_methods[m], text_hash(http_methods[m], strlen(http_methods[m])));
+    }
+    for (size_t m = 0; m < HTTP_VERSION_COUNT; m++) {
+        printf("%s -> %i\n", http_versions[m], text_hash(http_versions[m], strlen(http_versions[m])));
     }
 }
 
@@ -102,15 +103,53 @@ size_t http_nlen(const char* src, size_t max)
     return max;
 }
 
+static int get_http_method_from_hash(int method_hash)
+{
+    switch (method_hash) {
+    case RMH_GET:
+        return REQ_METHOD_GET;
+    case RMH_HEAD:
+        return REQ_METHOD_HEAD;
+    case RMH_OPTIONS:
+        return REQ_METHOD_OPTIONS;
+    case RMH_TRACE:
+        return REQ_METHOD_TRACE;
+    case RMH_PUT:
+        return REQ_METHOD_PUT;
+    case RMH_DELETE:
+        return REQ_METHOD_DELETE;
+    case RMH_POST:
+        return REQ_METHOD_POST;
+    case RMH_PATCH:
+        return REQ_METHOD_PATCH;
+    case RMH_CONNECT:
+        return REQ_METHOD_CONNECT;
+    }
+    return REQ_ERROR_METHOD_PARSE;
+}
+
+static int get_http_version_from_hash(int version_hash)
+{
+    switch (version_hash) {
+    case RVH_1_0:
+        return REQ_VERSION_1_0;
+    case RVH_1_1:
+        return REQ_VERSION_1_1;
+    case RVH_2_0:
+        return REQ_VERSION_2_0;
+    }
+    return REQ_ERROR_VERSION_PARSE;
+}
+
 StringView parse_word(const char* src, size_t max)
 {
     size_t i = 0;
     StringView ret = {};
-    while (is_whitespace(src[i]) && i < max) {
+    while (i < max && is_whitespace(src[i])) {
         i++;
     }
     ret.ptr = src + i;
-    while (!is_whitespace(src[i]) && i < max) {
+    while (i < max && !is_whitespace(src[i])) {
         ret.size++;
         i++;
     }
@@ -120,85 +159,33 @@ StringView parse_word(const char* src, size_t max)
 HttpRequestLine HttpRequestLine_create(const char from[WS_BUFFER_SIZE])
 {
     HttpRequestLine rv = {};
+    const char* from_cpy = from;
 
-    size_t request_line_len = http_nlen(from, WS_BUFFER_SIZE);
+    // make sure request is not too long
+    size_t request_line_len = http_nlen(from_cpy, WS_BUFFER_SIZE);
     if (request_line_len == WS_BUFFER_SIZE) {
         rv.method = REQ_ERROR_URI_SIZE;
         return rv;
     }
-
-    StringView method_sv = parse_word(from, WS_BUFFER_SIZE);
-    int method_hashed = text_hash(method_sv.ptr, method_sv.size);
-
-    switch (method_hashed) {
-    case RMH_GET:
-        rv.method = REQ_METHOD_GET;
-        break;
-    case RMH_HEAD:
-        rv.method = REQ_METHOD_HEAD;
-        break;
-    case RMH_OPTIONS:
-        rv.method = REQ_METHOD_OPTIONS;
-        break;
-    case RMH_TRACE:
-        rv.method = REQ_METHOD_TRACE;
-        break;
-    case RMH_PUT:
-        rv.method = REQ_METHOD_PUT;
-        break;
-    case RMH_DELETE:
-        rv.method = REQ_METHOD_DELETE;
-        break;
-    case RMH_POST:
-        rv.method = REQ_METHOD_POST;
-        break;
-    case RMH_PATCH:
-        rv.method = REQ_METHOD_PATCH;
-        break;
-    case RMH_CONNECT:
-        rv.method = REQ_METHOD_CONNECT;
-        break;
-    default:
-        rv.method = 0;
-    }
-
-    if (rv.method == 0) {
-        rv.method = REQ_ERROR_METHOD_PARSE;
+    // parsing http method
+    StringView method_sv = parse_word(from_cpy, WS_BUFFER_SIZE);
+    rv.method = get_http_method_from_hash(text_hash(method_sv.ptr, method_sv.size));
+    if (method_sv.size == 0 || method_sv.size == WS_BUFFER_SIZE || rv.method == REQ_ERROR_METHOD_PARSE) {
         return rv;
     }
-
-    unsigned int i = (method_sv.ptr - from) + method_sv.size;
-
-    size_t uri_start_index = 0;
-    size_t uri_end_index = 0;
-    for (; i < request_line_len; i++) {
-        if (!is_whitespace(from[i]) && uri_start_index == 0) {
-            uri_start_index = i;
-        } else if (is_whitespace(from[i]) && uri_start_index != 0) {
-            uri_end_index = i;
-            break;
-        }
-    }
-    if (uri_end_index == 0 || uri_start_index == 0) {
+    from_cpy = from + (method_sv.ptr - from) + method_sv.size;
+    // parsing http uri
+    StringView uri_sv = parse_word(from_cpy, WS_BUFFER_SIZE - (from_cpy - from));
+    if (uri_sv.size == 0 || uri_sv.size == WS_BUFFER_SIZE) {
         rv.method = REQ_ERROR_URI_PARSE;
         return rv;
     }
-
-    memcpy(rv.uri, from + uri_start_index, uri_end_index - uri_start_index);
-
-    for (; i < request_line_len; i++) {
-        for (size_t j = 0; j < HTTP_VERSION_COUNT; j++) {
-            unsigned int version_len = strlen(http_versions[j]);
-            if (strncmp(from + i, http_versions[j], version_len) == 0 && is_whitespace(from[i + version_len])) {
-                rv.version = http_versions_index[j];
-                i += version_len + 1;
-                goto http_version_done;
-            }
-        }
-    }
-
-http_version_done:
-    if (rv.version == 0) {
+    memcpy(rv.uri, uri_sv.ptr, uri_sv.size);
+    from_cpy = from + (uri_sv.ptr - from) + uri_sv.size;
+    // parsing http versoin
+    StringView version_sv = parse_word(from_cpy, WS_BUFFER_SIZE - (from_cpy - from));
+    rv.version = get_http_version_from_hash(text_hash(version_sv.ptr, version_sv.size));
+    if (version_sv.size == 0 || version_sv.size == WS_BUFFER_SIZE || rv.version == REQ_ERROR_VERSION_PARSE) {
         rv.method = REQ_ERROR_VERSION_PARSE;
         return rv;
     }
@@ -281,59 +268,51 @@ FileInfo FileInfo_create(const char* uri)
     return result;
 }
 
+// i got carried away with callgrind
+static int connection_hash(const char* src, size_t size)
+{
+    int hash = 0;
+    int pos = 1;
+    for (size_t i = 0; i < size; i++) {
+        switch (src[i]) {
+        case ' ':
+            break;
+        case 'c':
+        case 'C':
+        case 'o':
+        case 'n':
+        case 'e':
+        case 't':
+        case 'i':
+        case 'k':
+        case 'K':
+        case 'a':
+        case 'A':
+        case 'l':
+        case 'v':
+        case 's':
+        case 'p':
+        case ':':
+        case '-':
+            hash += tolower(src[i]) * pos;
+            pos++;
+            break;
+        default:
+            return -1;
+        }
+    }
+    return hash;
+}
+
 int headers_connection_parse(const char* from, size_t max_len)
 {
-    size_t start = 0;
-    while (is_whitespace(from[start])) {
-        start++;
-        if (from[start] == '\0') {
-            return 0;
-        }
-    }
-    size_t header_len = http_nlen(from + start, max_len);
-    if (header_len == 0) {
-        return 0;
-    }
-    static const char* connection_str = "connection";
-    size_t i;
-    for (i = 0; i < header_len; i++) {
-        if (from[start + i] == ':') {
-            i++;
-            break;
-        } else if (tolower(from[start + i]) != connection_str[i]) {
-            return 0;
-        }
-    }
-    if (i >= header_len) {
-        return 0;
-    }
-
-    // eat whitespace
-    for (; i < header_len; i++) {
-        if (!is_whitespace(from[start + i])) {
-            break;
-        }
-    }
-    if (i >= header_len) {
-        return 0;
-    }
-    static const char* keep_alive_str = "keep-alive";
-    static const char* close_str = "close";
-    size_t j;
-    for (j = 0; j < strlen(keep_alive_str); j++) {
-        if (tolower(from[start + i + j]) != keep_alive_str[j]) {
-            break;
-        }
-    }
-    if (j == strlen(keep_alive_str)) {
+    size_t header_len = http_nlen(from, max_len);
+    int chash = connection_hash(from, header_len);
+    // printf("header_len=%zu, hash=%i, header=%s|\n", header_len, chash, from);
+    switch (chash) {
+    case 23059:
         return REQ_CONNECTION_KEEP_ALIVE;
-    }
-    for (j = 0; j < strlen(close_str); j++) {
-        if (tolower(from[start + i + j]) != close_str[j]) {
-            break;
-        }
-    }
-    if (j == strlen(close_str)) {
+    case 14066:
         return REQ_CONNECTION_CLOSE;
     }
     return 0;
@@ -341,7 +320,7 @@ int headers_connection_parse(const char* from, size_t max_len)
 
 static const char* connection_close_cstr = "Connection: close\r\n";
 static const char* connection_keepalive_str = "Connection: keep-alive\r\n";
-static const char* connection_keepalive_timeout_str = "Keep-Alive: timeout=1, max=200\r\n";
+static const char* connection_keepalive_timeout_str = "Keep-Alive: timeout=1, max=500\r\n";
 HttpResponse HttpResponse_create(HttpRequest* req, char* header_buffer, size_t header_buffer_size)
 {
     HttpResponse ret;
@@ -358,7 +337,6 @@ HttpResponse HttpResponse_create(HttpRequest* req, char* header_buffer, size_t h
     case REQ_VERSION_2_0:
     default:
         // Version not supported error
-
         strcpy(head_ptr, HTTP_1_1);
         head_ptr += strlen(HTTP_1_1);
 

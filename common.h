@@ -5,7 +5,9 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
+#ifndef DebugPrint
 #define DebugPrint 1
+#endif
 
 #define DebugErr(...)                                                                                                  \
     if (DebugPrint) {                                                                                                  \

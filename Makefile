@@ -3,13 +3,14 @@ CC=gcc
 CFLAGS=-Wall -Werror
 CFLAGS_DEBUG=-g -fsanitize=address
 CFLAGS_PROFILE =-g -O3
-CFLAGS_RELEASE=-O3
-
-all: server unit_test
+CFLAGS_RELEASE=-O3 -DDebugPrint=0
 
 debug: CFLAGS += $(CFLAGS_DEBUG)
 profile: CFLAGS += $(CFLAGS_PROFILE)
 release: CFLAGS += $(CFLAGS_RELEASE)
+all: CFLAGS += $(CFLAGS_RELEASE)
+
+all: server unit_test
 
 debug: server unit_test
  
