@@ -10,13 +10,14 @@ profile: CFLAGS += $(CFLAGS_PROFILE)
 release: CFLAGS += $(CFLAGS_RELEASE)
 all: CFLAGS += $(CFLAGS_RELEASE)
 
-all: server unit_test
+all: server
 
 debug: server unit_test
+	./unit_test
  
-profile: server unit_test
+profile: server
 
-release: server unit_test
+release: server
 
 .PHONY: all debug profile release
 

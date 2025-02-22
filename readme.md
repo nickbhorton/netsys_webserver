@@ -1,3 +1,8 @@
+# Testing
+
+There is a set of unit test automatically run by `make debug` however it
+requires `cunit`.
+
 # Build
 
 A raw make command will by default make the server in release mode. This mode
