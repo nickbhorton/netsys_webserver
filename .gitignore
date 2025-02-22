@@ -1,5 +1,5 @@
 *.o
-test
+unit_test
 server
 .clang-format
 

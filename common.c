@@ -1,5 +1,4 @@
 #include "common.h"
-#include "debug_macros.h"
 
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -593,7 +592,7 @@ int bind_socket(const char* addr, const char* port, Address* address)
             fprintf(stderr, "port must be a number\n");
             return -1;
         }
-        NP_DEBUG_ERR("getaddrinfo() error: %s\n", gai_strerror(rv));
+        DebugErr("getaddrinfo() error: %s\n", gai_strerror(rv));
         return -1;
     }
 
@@ -604,26 +603,26 @@ int bind_socket(const char* addr, const char* port, Address* address)
     for (ptr = address_info; ptr != NULL; ptr = ptr->ai_next) {
         if ((fd = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol)) < 0) {
             int en = errno;
-            NP_DEBUG_ERR("socket() error: %s\n", strerror(en));
+            DebugErr("socket() error: %s\n", strerror(en));
             continue; // next loop
         }
         int yes = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
             int en = errno;
-            NP_DEBUG_ERR("setsockopt() %s\n", strerror(en));
+            DebugErr("setsockopt() %s\n", strerror(en));
             close(fd);
             continue;
         }
         if ((bind(fd, ptr->ai_addr, ptr->ai_addrlen)) < 0) {
             int en = errno;
-            NP_DEBUG_ERR("bind() error: %s\n", strerror(en));
+            DebugErr("bind() error: %s\n", strerror(en));
             continue; // next loop
         }
         break;
     }
 
     if (ptr == NULL) {
-        NP_DEBUG_ERR("failed to find and bind a socket\n");
+        DebugErr("failed to find and bind a socket\n");
         close(fd);
         freeaddrinfo(address_info);
         return -1;

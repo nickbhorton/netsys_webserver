@@ -1,23 +1,32 @@
 CC=gcc
-CFLAGS_DEBUG=-g -Wall -Werror -fsanitize=address
-CFLAGS_STRACE=-g -O3 -Wall -Werror
-CFLAGS_RELEASE=-O3 -Wall -Werror
-CFLAGS=$(CFLAGS_STRACE)
 
-all: test server
+CFLAGS=-Wall -Werror
+CFLAGS_DEBUG=-g -fsanitize=address
+CFLAGS_PROFILE =-g -O3
+CFLAGS_RELEASE=-O3
 
-.PHONY: all
-	
+all: server unit_test
 
-test: unit_test.o common.o debug_macros.o
+debug: CFLAGS += $(CFLAGS_DEBUG)
+profile: CFLAGS += $(CFLAGS_PROFILE)
+release: CFLAGS += $(CFLAGS_RELEASE)
+
+debug: server unit_test
+ 
+profile: server unit_test
+
+release: server unit_test
+
+.PHONY: all debug profile release
+
+unit_test: unit_test.o common.o
 	$(CC) -o $@ $^ $(CFLAGS) -lcunit
 
-server: server.o common.o debug_macros.o
+server: server.o common.o
 	$(CC) -o $@ $^ $(CFLAGS)
 
 unit_test.o: unit_test.c
 common.o: common.c common.h
-debug_macros.o: debug_macros.c debug_macros.h
 server.o: server.c
 
 clean:
@@ -25,3 +34,4 @@ clean:
 	rm -f test
 	rm -f server
 	rm -f aria2c.log
+	rm -f callgrind*

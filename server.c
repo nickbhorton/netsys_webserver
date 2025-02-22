@@ -12,8 +12,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "debug_macros.h"
-
 #define BACKLOG 128
 #define CHUNK_SIZE 16384
 
@@ -72,7 +70,7 @@ int main(int argc, char** argv)
         cfd = accept(sfd, Address_sockaddr(&client_address), &client_address.addrlen);
         if (cfd < 0) {
             int en = errno;
-            NP_DEBUG_ERR("accept() %s\n", strerror(en));
+            DebugErr("accept() %s\n", strerror(en));
             continue;
         }
         int cpid;
@@ -100,7 +98,7 @@ int main(int argc, char** argv)
                     int recv_count = recv(cfd, recv_buff + recv_buffer_index, WS_BUFFER_SIZE - recv_buffer_index, 0);
                     if (recv_count < 0) {
                         int en = errno;
-                        NP_DEBUG_ERR("recv() %s\n", strerror(en));
+                        DebugErr("recv() %s\n", strerror(en));
                         goto clean_exit;
                     } else if (recv_count == 0) {
                         // client has closed the connection
@@ -125,7 +123,7 @@ int main(int argc, char** argv)
                         );
                         if (rv < 0) {
                             int en = errno;
-                            NP_DEBUG_ERR("send() %s\n", strerror(en));
+                            DebugErr("send() %s\n", strerror(en));
                             goto clean_exit;
                         }
                         header_bytes_sent += rv;
@@ -155,7 +153,7 @@ int main(int argc, char** argv)
                                 );
                                 if (rv < 0) {
                                     int en = errno;
-                                    NP_DEBUG_ERR("send() %s\n", strerror(en));
+                                    DebugErr("send() %s\n", strerror(en));
                                     goto clean_exit;
                                 }
                                 chunk_bytes_sent += rv;
@@ -171,7 +169,7 @@ int main(int argc, char** argv)
                     } else if (request.headers.connection == REQ_CONNECTION_CLOSE) {
                         connect_str = "close";
                     }
-                    NP_DEBUG_MSG(
+                    DebugMsg(
                         "%i: %s%i%s %-48s Connection: %s\n",
                         cpid,
                         response.code == 200 ? "\e[32m" : "\e[31m",
@@ -207,27 +205,27 @@ int main(int argc, char** argv)
 
 void parent_sigint_handler(int signal)
 {
-    NP_DEBUG_MSG("parent %i SIGINT handler\n", getpid());
+    DebugMsg("parent %i SIGINT handler\n", getpid());
 
     int child_pid = 0;
     int status = 0;
     while (true) {
         child_pid = waitpid(-1, &status, 0);
         if (child_pid == -1 && errno == ECHILD) {
-            // NP_DEBUG_MSG("parent %i children have all been reaped parent can exit\n", getpid());
+            // DebugMsg("parent %i children have all been reaped parent can exit\n", getpid());
             break;
         } else if (child_pid == -1) {
             int en = errno;
-            NP_DEBUG_MSG("wait() %s\n", strerror(en));
+            DebugMsg("wait() %s\n", strerror(en));
         } else {
-            NP_DEBUG_MSG("\e[31m%i\e[0m reaped child, status %i\n", child_pid, status);
+            DebugMsg("\e[31m%i\e[0m reaped child, status %i\n", child_pid, status);
         }
     }
 
     int rv = shutdown(sfd, 2);
     if (rv < 0) {
         int en = errno;
-        NP_DEBUG_ERR("shutdown() %s\n", strerror(en));
+        DebugErr("shutdown() %s\n", strerror(en));
     }
     fflush(stdout);
     fflush(stderr);

@@ -5,6 +5,18 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
+#define DebugPrint 1
+
+#define DebugErr(...)                                                                                                  \
+    if (DebugPrint) {                                                                                                  \
+        fprintf(stderr, __VA_ARGS__);                                                                                  \
+    }
+
+#define DebugMsg(...)                                                                                                  \
+    if (DebugPrint) {                                                                                                  \
+        fprintf(stdout, __VA_ARGS__);                                                                                  \
+    }
+
 #define WS_BUFFER_SIZE 2048
 
 #define WS_URI_BUFFER_SIZE 1024
@@ -14,6 +26,7 @@
 // URI_BUFFER_SIZE - strlen(ROOT_DIR)
 #define WS_PATH_BUFFER_SIZE 1021
 
+// 10 seconds
 #define WS_CHILD_TIMEOUT 10000
 
 // Request Methods
