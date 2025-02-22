@@ -9,10 +9,7 @@
 #define DebugPrint 1
 #endif
 
-#define DebugErr(...)                                                                                                  \
-    if (DebugPrint) {                                                                                                  \
-        fprintf(stderr, __VA_ARGS__);                                                                                  \
-    }
+#define DebugErr(...) fprintf(stderr, __VA_ARGS__);
 
 #define DebugMsg(...)                                                                                                  \
     if (DebugPrint) {                                                                                                  \

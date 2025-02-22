@@ -58,7 +58,6 @@ int main(int argc, char** argv)
     }
 
     parent_setup_signal_handlers();
-    // compute_hashes();
 
     Address server_address;
     int rv;
@@ -260,19 +259,4 @@ void child_setup_signal_handlers()
     FatalCheckErrno(rv, sigaction(SIGINT, &sa, NULL), "child SIGINT sigaction()");
 }
 
-void netprint(const char* buffer, size_t size)
-{
-    for (size_t i = 0; i < size; i++) {
-        if (buffer[i] == '\r') {
-            printf("\033[41mCR\033[0m");
-        } else if (buffer[i] == '\n') {
-            printf("\033[41mLF\033[0m\n");
-        } else if (buffer[i] == '\0') {
-            break;
-        } else {
-            printf("%c", buffer[i]);
-        }
-    }
-}
-
-void useage() { printf("./server <port number>\n"); }
+void useage() { DebugErr("./server <port number>\n"); }
