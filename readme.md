@@ -3,6 +3,9 @@
 There is a set of unit test automatically run by `make debug` however it
 requires `cunit`.
 
+The `test.bash` and `files.txt` assume that a directory `www` exists with the
+test files given on canvas.
+
 # Build
 
 A raw make command will by default make the server in release mode. This mode
