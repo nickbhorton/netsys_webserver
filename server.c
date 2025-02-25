@@ -131,13 +131,14 @@ int main(int argc, char** argv)
                         header_bytes_sent += rv;
                     }
 
-                    // send the file in chunks
+                    // send the file
                     if (response.code == 200 && request.line.method == REQ_METHOD_GET) {
                         int tosend_fd = open(request.line.uri, O_RDONLY);
                         if (tosend_fd < 0) {
                             goto clean_exit;
                         }
                         sendfile(cfd, tosend_fd, NULL, response.finfo.length);
+                        close(tosend_fd);
                     }
 
                     const char* connect_str = "none";
