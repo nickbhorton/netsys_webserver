@@ -1,12 +1,14 @@
 #include "common.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/poll.h>
+#include <sys/sendfile.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -131,36 +133,11 @@ int main(int argc, char** argv)
 
                     // send the file in chunks
                     if (response.code == 200 && request.line.method == REQ_METHOD_GET) {
-                        FILE* fptr = fopen(request.line.uri, "r");
-                        if (fptr == NULL) {
-                            // If this is able to fail then stat() does not fail but open does.
+                        int tosend_fd = open(request.line.uri, O_RDONLY);
+                        if (tosend_fd < 0) {
                             goto clean_exit;
                         }
-
-                        size_t file_bytes_sent = 0;
-                        while (file_bytes_sent < response.finfo.length) {
-                            // put bytes into the send buffer
-                            size_t chunk_bytes_read = fread(send_buff, 1, CHUNK_SIZE, fptr);
-
-                            // send the current send buffer to the client
-                            size_t chunk_bytes_sent = 0;
-                            while (chunk_bytes_sent < chunk_bytes_read) {
-                                rv = send(
-                                    cfd,
-                                    send_buff + chunk_bytes_sent,
-                                    chunk_bytes_read - chunk_bytes_sent,
-                                    MSG_NOSIGNAL
-                                );
-                                if (rv < 0) {
-                                    int en = errno;
-                                    DebugErr("send() %s\n", strerror(en));
-                                    goto clean_exit;
-                                }
-                                chunk_bytes_sent += rv;
-                            }
-                            file_bytes_sent += chunk_bytes_sent;
-                        }
-                        fclose(fptr);
+                        sendfile(cfd, tosend_fd, NULL, response.finfo.length);
                     }
 
                     const char* connect_str = "none";
