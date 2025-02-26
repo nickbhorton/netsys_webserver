@@ -133,12 +133,8 @@ int main(int argc, char** argv)
 
                     // send the file
                     if (response.code == 200 && request.line.method == REQ_METHOD_GET) {
-                        int tosend_fd = open(request.line.uri, O_RDONLY);
-                        if (tosend_fd < 0) {
-                            goto clean_exit;
-                        }
-                        sendfile(cfd, tosend_fd, NULL, response.finfo.length);
-                        close(tosend_fd);
+                        sendfile(cfd, response.fd, NULL, response.file_size);
+                        close(response.fd);
                     }
 
                     const char* connect_str = "none";

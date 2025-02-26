@@ -73,14 +73,10 @@ typedef struct {
 } HttpRequest;
 
 typedef struct {
-    int result;
-    size_t length;
-} FileInfo;
-
-typedef struct {
     uint32_t code;
     ptrdiff_t header_size;
-    FileInfo finfo;
+    size_t file_size;
+    int fd;
 } HttpResponse;
 
 typedef struct {
@@ -127,8 +123,6 @@ int uri_to_path(char uri[WS_URI_BUFFER_SIZE]);
 HttpResponse HttpResponse_create(HttpRequest* req, char* header_buffer, size_t header_buffer_size);
 
 int headers_connection_parse(const char* from, size_t max_len);
-
-FileInfo FileInfo_create(const char* sanitized_uri);
 
 struct sockaddr* Address_sockaddr(Address* a);
 

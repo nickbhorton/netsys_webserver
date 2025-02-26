@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -254,19 +255,14 @@ int uri_to_path(char uri[WS_URI_BUFFER_SIZE])
     return 0;
 }
 
-FileInfo FileInfo_create(const char* uri)
+ssize_t get_file_size(const char* uri)
 {
-    struct stat st;
-    FileInfo result = {};
+    static struct stat st;
     int rv = stat(uri, &st);
     if (rv < 0) {
-        int en = errno;
-        result.result = en;
-        return result;
+        return -1;
     }
-    result.result = 0;
-    result.length = st.st_size;
-    return result;
+    return st.st_size;
 }
 
 // i got carried away with callgrind
@@ -317,6 +313,12 @@ int headers_connection_parse(const char* from, size_t max_len)
         return REQ_CONNECTION_CLOSE;
     }
     return 0;
+}
+
+static char* response_pushn(char* head_ptr, const char* topush, size_t n)
+{
+    strncpy(head_ptr, topush, n);
+    return head_ptr + n;
 }
 
 static char* response_push(char* head_ptr, const char* topush)
@@ -387,7 +389,7 @@ static char* fill_response_header(
 
 HttpResponse HttpResponse_create(HttpRequest* req, char* header_buffer, size_t header_buffer_size)
 {
-    HttpResponse ret;
+    HttpResponse ret = {};
 
     const char* http_version_str;
     switch (req->line.version) {
@@ -433,10 +435,10 @@ HttpResponse HttpResponse_create(HttpRequest* req, char* header_buffer, size_t h
         return ret;
     }
 
-    // get file info
-    ret.finfo = FileInfo_create(req->line.uri);
-    if (ret.finfo.result) {
-        switch (ret.finfo.result) {
+    // get file size
+    ret.file_size = get_file_size(req->line.uri);
+    if (ret.file_size < 0) {
+        switch (errno) {
         case EACCES:
             fill_response_header(403, http_version_str, req, &ret, header_buffer, true);
             break;
@@ -444,6 +446,21 @@ HttpResponse HttpResponse_create(HttpRequest* req, char* header_buffer, size_t h
             fill_response_header(404, http_version_str, req, &ret, header_buffer, true);
         }
         return ret;
+    }
+
+    // open file
+    if (req->line.method == REQ_METHOD_GET) {
+        ret.fd = open(req->line.uri, O_RDONLY);
+        if (ret.fd < 0) {
+            switch (errno) {
+            case EACCES:
+                fill_response_header(403, http_version_str, req, &ret, header_buffer, true);
+                break;
+            default:
+                fill_response_header(404, http_version_str, req, &ret, header_buffer, true);
+            }
+            return ret;
+        }
     }
 
     // getting the content type of file path
@@ -456,21 +473,18 @@ HttpResponse HttpResponse_create(HttpRequest* req, char* header_buffer, size_t h
     char* head_ptr = fill_response_header(200, http_version_str, req, &ret, header_buffer, false);
 
     // content type
-    strcpy(head_ptr, "Content-Type: ");
-    head_ptr += strlen("Content-Type: ");
-    strcpy(head_ptr, content_type);
-    head_ptr += strlen(content_type);
+    head_ptr = response_push(head_ptr, "Content-Type: ");
+    head_ptr = response_push(head_ptr, content_type);
     head_ptr = response_push_crlf(head_ptr);
 
     // content length
-    strcpy(head_ptr, "Content-Length: ");
-    head_ptr += strlen("Content-Length: ");
+    head_ptr = response_push(head_ptr, "Content-Length: ");
 
+    // content length as a char*
     static char buffer[128];
-    int snprintf_bytes = snprintf(buffer, 128, "%zu", ret.finfo.length);
+    int snprintf_bytes = snprintf(buffer, 128, "%zu", ret.file_size);
 
-    strncpy(head_ptr, buffer, snprintf_bytes);
-    head_ptr += snprintf_bytes;
+    head_ptr = response_pushn(head_ptr, buffer, snprintf_bytes);
     head_ptr = response_push_crlf(head_ptr);
     head_ptr = response_push_crlf(head_ptr);
 
