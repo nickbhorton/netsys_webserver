@@ -19,6 +19,10 @@ profile: server
 
 release: server
 
+install: server
+	cp server nhws
+	mv nhws ~/opt/bin
+
 .PHONY: all debug profile release
 
 unit_test: unit_test.o common.o
